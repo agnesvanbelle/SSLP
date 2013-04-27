@@ -19,22 +19,52 @@ class Extractor(object):
   
   def extract(self):   
       self.reader.line_list_aligns = "Meaningless init value because python had no do..while"
-      while (self.reader.line_list_aligns != None): #and self.reader.counter < 4):
+      while (self.reader.line_list_aligns != None and self.reader.counter < 3):
         self.reader.load_next_line()
         if (self.reader.line_list_aligns != None):
           self.parsePhrase(self.reader.line_list_aligns, self.reader.line_nl_words, self.reader.line_en_words)
 
-  def parsePhrase(self, alignments, nl, en):
+  def parsePhrase(self, alignments, list_nl, list_en):
     sys.stdout.write('\n pair '+ str(self.reader.counter-1) + ':\n')
     print alignments
-    print nl
-    print en
+    print list_nl
+    print list_en
+    string_nl = " ".join(list_nl)
+    string_en = " ".join(list_en)
+    #print string_nl
+    #print string_en
     
-    #TODO
-    pass
+    for i1 in range(0, len(list_nl)):
+      for i2 in range(i1, min(i1+self.maxPhraseLen, len(list_nl))):
+        list_enWordsAligned = []
+        for i in range(i1, i2+1):
+          list_enWordsAligned.extend(self.get_possible_alignments(alignments, i, 'nl'))
+          print list_enWordsAligned
+        #string_enWordsAligned = " ".join(list_enWordsAligned)
+        #print string_enWordsAligned
+        sys.stdout.write(self.getSubstring(list_nl, range(i1,i2+1)) + 
+                          ' ==> ' +  
+                          self.getSubstring(list_en, list_enWordsAligned) + '\n')
+      #break
+  
+  def getSubstring(self,line_list, aligned_list):
+    wordList = map((lambda x : line_list[x]), aligned_list)
+    return " ".join(wordList)
     
-    
-    
+  #returns the list of tuples sorted by the second element
+  def sort_by_y(self, list_aligns):
+    return sorted(list_aligns, key=lambda x : x[1])
+
+  #returns all the possible alignments of an element
+  #to return all the possible alignments of element y, use sort_by_y() first
+  #^it traverses whole list so sorting not needed
+  def get_possible_alignments(self, list_aligns, nr, language):
+    if (language == 'en'): #source language
+      return [item[0] for item in list_aligns if item[1]==nr]
+    else:
+      return [item[1] for item in list_aligns if item[0]==nr]
+  
+
 class Reader(object):
   """ 
     read lines from files
@@ -120,7 +150,7 @@ class Main(object):
   """
   
   #path = '/Users/nikos/Downloads/aligned-data/'
-  path = 'aligned-data/'
+  path = '/run/media/root/ss-ntfs/3.Documents/huiswerk_20122013/SSLP/project1/aligned-data/'
   
   alignsFileName = 'aligned.nl-en_short'
   nlFileName = 'europarl.nl-en.nl_short'
