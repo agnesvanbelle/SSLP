@@ -3,6 +3,12 @@ import sys
 
 debug = True
 
+""" 
+  The Main class contains filenames (could be extended to use command-line arguments) and starts everything
+  The Reader class is used to read - line by line - the relevant stuff from the three files 
+  The Extractor class extracts phrases (using Reader)
+"""
+
 class Extractor(object): 
   """ 
     extract phrases
@@ -23,12 +29,14 @@ class Extractor(object):
   def __init__(self, reader):
     self.reader = reader
   
+  # extract phrases for all sentence pairs  (provided by the "Reader")
   def extract(self):   
       self.reader.line_list_aligns = "Meaningless init value because python had no do..while"
-      while (self.reader.line_list_aligns != None and self.reader.counter < 4):
+      while (self.reader.line_list_aligns != None and self.reader.counter < 4): # the fixed limit is only for debug 
         self.reader.load_next_line()
         if (self.reader.line_list_aligns != None):
-          self.parsePhrase(self.reader.line_list_aligns, self.reader.line_nl_words, self.reader.line_en_words)
+          # parse phrases using  the dutch sentence, the english sentence and their alignments-list
+          self.parseSentencePair(self.reader.line_list_aligns, self.reader.line_nl_words, self.reader.line_en_words)
       
       sys.stdout.write('\n')
       sys.stdout.write('Extracted ' + str(self.total_extracted) + ' phrase pairs \n' +
@@ -36,14 +44,15 @@ class Extractor(object):
                         '\t unique ones for en: ' + str(self.unique_en) + '\n'+
                         '\t unique pairs: ' + str(self.unique_nl_en) + '\n')
   
-                        
-  def parsePhrase(self, alignments, list_nl, list_en):
+                      
+  #extract phrases from one sentence pair
+  def parseSentencePair(self, alignments, list_nl, list_en):
     sys.stdout.write('\n pair '+ str(self.reader.counter-1) + ':\n')
     print alignments
     print list_nl
     print list_en
-    string_nl = " ".join(list_nl)
-    string_en = " ".join(list_en)
+    #string_nl = " ".join(list_nl)
+    #string_en = " ".join(list_en)
     #print string_nl
     #print string_en
     
@@ -131,14 +140,17 @@ class Extractor(object):
               self.table_nl_en[enString] = 1
               self.unique_nl_en = self.unique_nl_en + 1
             
-            # TODO:
+            # ===> TODO:
             # check for unaligned words in english phrase
     
     if debug:
       sys.stdout.write('\nWith this sentence pair , \n')
       sys.stdout.write('we have extracted ' + str(totalExtractedThisPhrase) + ' phrase pairs \n')
+          
                         
-                        
+  # get the words in the word-list "line_list" that the indices
+  # in "aligned_list" point to
+  # return them as a string
   def getSubstring(self,line_list, aligned_list):
     wordList = map((lambda x : line_list[x]), aligned_list)
     return " ".join(wordList)
@@ -152,8 +164,7 @@ class Extractor(object):
     lenEnWords = len(list_enWords)
     
     if (lenEnWords== 0): # no aligned words
-      return False     
-    
+      return False   
     
     for i in range(0, lenAlignments):
       alignment_pair = alignments[i]
@@ -170,7 +181,8 @@ class Extractor(object):
         if (j == lenEnWords):
           return True
     return False
-    
+
+  #not used
   #def containsSublist(self, lst, sublst):
     #n = len(sublst)
     #return any((sublst == lst[i:i+n]) for i in xrange(len(lst)-n+1))
@@ -196,7 +208,8 @@ class Extractor(object):
         j = j + 1
     
     return True
-    
+  
+  #not used
   #returns the list of tuples sorted by the second element
   #def sort_by_y(self, list_aligns):
   #  return sorted(list_aligns, key=lambda x : x[1])
@@ -222,7 +235,6 @@ class Reader(object):
   en = ''
   
   
-  
   f_aligns = None
   f_nl = None
   f_en = None
@@ -237,7 +249,6 @@ class Reader(object):
     self.aligns = path+alignsFileName
     self.nl = path+nlFileName
     self.en = path+enFileName
-    
     
   
   def load_data(self):
