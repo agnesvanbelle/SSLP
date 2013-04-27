@@ -7,6 +7,12 @@ debug = True
   The Main class contains filenames (could be extended to use command-line arguments) and starts everything
   The Reader class is used to read - line by line - the relevant stuff from the three files 
   The Extractor class extracts phrases (using Reader)
+  
+  In 'Extractor.parseSentencePair(..)':
+  i1, i2 = dutch indices
+  j1, j2 = english indices
+  (i.e. treat dutch as source)
+  
 """
 
 class Extractor(object): 
@@ -32,7 +38,7 @@ class Extractor(object):
   # extract phrases for all sentence pairs  (provided by the "Reader")
   def extract(self):   
       self.reader.line_list_aligns = "Meaningless init value because python had no do..while"
-      while (self.reader.line_list_aligns != None and self.reader.counter < 4): # the fixed limit is only for debug 
+      while (self.reader.line_list_aligns != None and self.reader.counter < 1): # the fixed limit is only for debug 
         self.reader.load_next_line()
         if (self.reader.line_list_aligns != None):
           # parse phrases using  the dutch sentence, the english sentence and their alignments-list
@@ -61,10 +67,11 @@ class Extractor(object):
     for i1 in range(0, len(list_nl)):
       for i2 in range(i1, min(i1+self.maxPhraseLen, len(list_nl))):        
         
+        # the considered dutch words
+        list_nlWords = range(i1, i2+1)
         
-        list_nlWords = range(i1, i2+1)        
-        list_enWordsAligned = []
-        
+        # get the english words aligned to the considered dutch words
+        list_enWordsAligned = []        
         for i in list_nlWords:
           list_enWordsAligned.extend(self.get_possible_alignments(alignments, i, 'nl'))  
         
@@ -142,12 +149,40 @@ class Extractor(object):
             
             # ===> TODO:
             # check for unaligned words in english phrase
+            
+            
+            #~j2b = j2 + 1
+            #~while(j2b < min(i1+self.maxPhraseLen, len(list_en))):
+              #~if (self.isEnUnaligned(j2b, alignments)):                
+                #~# add phrase
+            #~
+            #~j2b = j2  
+            #~j1 = j1 - 1            
+            #~while(j1 > 0 and j2b-j1 < self.maxPhraseLen):
+              #~if (self.isEnUnaligned(j1, alignments)):
+                 #~# add phrase
+              #~
+              #~j2b = j2 + 1
+            
     
     if debug:
       sys.stdout.write('\nWith this sentence pair , \n')
       sys.stdout.write('we have extracted ' + str(totalExtractedThisPhrase) + ' phrase pairs \n')
           
-                        
+  
+  # check if the english word is unaligned
+  def isEnUnaligned(self, enIndex, alignments):
+    
+    lenAlignments = len(alignments)
+    
+    i = 0
+    while (i < lenAlignments and alignments[i][1] <= enIndex):
+      if (alignments[i][1] == enIndex):
+        return False
+      i = i + 1
+    
+    return True
+    
   # get the words in the word-list "line_list" that the indices
   # in "aligned_list" point to
   # return them as a string
