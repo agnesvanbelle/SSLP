@@ -74,35 +74,7 @@ def load_data(aligns, nl, en):
     if (counter == 4):
       break #testing
 
-def load_data(aligns, nl, en):
-	#open the input files
-  f_aligns = open(aligns)
-  f_nl = open(nl)
-  f_en = open(en)
 
-  counter = 0
-
-  while(True):
-    #get the next line of each file
-    line_aligns = f_aligns.next()
-    line_nl = f_nl.next()
-    line_en = f_en.next()
-
-    if not line_aligns: #EOF
-      f_aligns.close()
-      f_nl.close()
-      f_en.close()
-      break
-
-    list_aligns = get_align_list(line_aligns)
-    nl_words = get_words (line_nl)
-    en_words = get_words (line_en)
-
-    phrase_extraction(list_aligns, nl_words, en_words)
-    
-    counter = counter +1
-    if (counter == 4):
-      break #testing
 path = 'aligned-data/'
 
 aligns = 'aligned.nl-en2'
