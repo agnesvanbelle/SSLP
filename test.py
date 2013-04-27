@@ -38,7 +38,7 @@ class Extractor(object):
   # extract phrases for all sentence pairs  (provided by the "Reader")
   def extract(self):   
       self.reader.line_list_aligns = "Meaningless init value because python had no do..while"
-      while (self.reader.line_list_aligns != None and self.reader.counter < 1): # the fixed limit is only for debug 
+      while (self.reader.line_list_aligns != None and self.reader.counter < 4): # the fixed limit is only for debug 
         self.reader.load_next_line()
         if (self.reader.line_list_aligns != None):
           # parse phrases using  the dutch sentence, the english sentence and their alignments-list
@@ -46,11 +46,12 @@ class Extractor(object):
       
       sys.stdout.write('\n')
       sys.stdout.write('Extracted ' + str(self.total_extracted) + ' phrase pairs \n' +
-                        '\t unique ones for nl: ' + str(self.unique_nl) + '\n'+ 
-                        '\t unique ones for en: ' + str(self.unique_en) + '\n'+
+                        '\t unique phrases for nl: ' + str(self.unique_nl) + '\n'+ 
+                        '\t unique phrases for en: ' + str(self.unique_en) + '\n'+
                         '\t unique pairs: ' + str(self.unique_nl_en) + '\n')
   
-                      
+      print self.table_nl_en       
+
   #extract phrases from one sentence pair
   def parseSentencePair(self, alignments, list_nl, list_en):
     sys.stdout.write('\n pair '+ str(self.reader.counter-1) + ':\n')
@@ -122,31 +123,15 @@ class Extractor(object):
           if consistent:
             #update stats
             self.total_extracted = self.total_extracted + 1
-            totalExtractedThisPhrase = totalExtractedThisPhrase + 1
+            totalExtractedThisPhrase = totalExtractedThisPhrase + 1            
+
+            # update tables
+            nlEntry = self.getSubstring(list_nl, range(i1,i2+1)) 
+            enEntry = self.getSubstring(list_en, range(j1,j2+1)) 
+            nl_enEntry = (nlEntry , enEntry) #tuple
             
-            nlString = self.getSubstring(list_nl, list_nlWords)
-            if nlString in self.table_nl:
-              self.table_nl[nlString] = self.table_nl[nlString] + 1              
-            else:
-              self.table_nl[nlString] = 1
-              self.unique_nl = self.unique_nl + 1
-            
-            
-            enString = self.getSubstring(list_en, list_enWordsAligned)
-            if enString in self.table_en:
-              self.table_en[enString] = self.table_en[enString] + 1              
-            else:
-              self.table_en[enString] = 1
-              self.unique_en = self.unique_en + 1
-            
-          
-            nl_enString = (nlString , enString) #tuple
-            if nl_enString in self.table_nl_en:
-              self.table_nl_en[nenString] = self.table_nl_en[enString] + 1              
-            else:
-              self.table_nl_en[enString] = 1
-              self.unique_nl_en = self.unique_nl_en + 1
-            
+            self.updateTables(nlEntry, enEntry, nl_enEntry)
+
             # ===> TODO:
             # check for unaligned words in english phrase
             
@@ -168,8 +153,30 @@ class Extractor(object):
     if debug:
       sys.stdout.write('\nWith this sentence pair , \n')
       sys.stdout.write('we have extracted ' + str(totalExtractedThisPhrase) + ' phrase pairs \n')
-          
   
+
+  # update the hash tables (phrase (pair) --> count)
+  def updateTables(self, nlString, enString, nl_enString):
+    
+    if nlString in self.table_nl:
+      self.table_nl[nlString] = self.table_nl[nlString] + 1              
+    else:
+      self.table_nl[nlString] = 1
+      self.unique_nl = self.unique_nl + 1    
+    
+    if enString in self.table_en:
+      self.table_en[enString] = self.table_en[enString] + 1              
+    else:
+      self.table_en[enString] = 1
+      self.unique_en = self.unique_en + 1    
+  
+    if nl_enString in self.table_nl_en:
+      self.table_nl_en[nl_enString] = self.table_nl_en[nl_enString] + 1              
+    else:
+      self.table_nl_en[nl_enString] = 1
+      self.unique_nl_en = self.unique_nl_en + 1
+
+
   # check if the english word is unaligned
   def isEnUnaligned(self, enIndex, alignments):
     
