@@ -26,7 +26,7 @@ class Extractor(object):
   table_en = {}
   table_nl_en = {}
   
-  total_extracted = 1
+  total_extracted = 0
   
   unique_nl = 0
   unique_en = 0
@@ -342,7 +342,8 @@ class Main(object):
   """
   
   #path = '/Users/nikos/Downloads/aligned-data/'
-  path = '/run/media/root/ss-ntfs/3.Documents/huiswerk_20122013/SSLP/project1/aligned-data/'
+  #path = '/run/media/root/ss-ntfs/3.Documents/huiswerk_20122013/SSLP/project1/aligned-data/'
+  path = 'aligned-data/'
   
   alignsFileName = 'aligned.nl-en_short'
   nlFileName = 'europarl.nl-en.nl_short'
