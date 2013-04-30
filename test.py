@@ -1,7 +1,22 @@
 import sys
+import os
+import cPickle as pickle
+
+#path = '/Users/nikos/Downloads/aligned-data/'
+#path = '/run/media/root/ss-ntfs/3.Documents/huiswerk_20122013/SSLP/project1/aligned-data/'
+path = 'aligned-data/'
+
+alignsFileName = 'aligned.nl-en2'
+nlFileName = 'europarl.nl-en.nl2'
+enFileName = 'europarl.nl-en.en2'
+
+basicDebug = True
+moreDebug = False
 
 
-debug = True
+table_nl_file = 'table_nl.txt'
+table_en_file = 'table_en.txt'
+table_nl_en_file = 'table_nl_en.txt'
 
 """ 
   The Main class contains filenames (could be extended to use command-line arguments) and starts everything
@@ -14,6 +29,7 @@ debug = True
   (i.e. treat dutch as source)
   
 """
+
 
 class Extractor(object): 
   """ 
@@ -38,7 +54,10 @@ class Extractor(object):
   # extract phrases for all sentence pairs  (provided by the "Reader")
   def extract(self):   
       self.reader.line_list_aligns = "Meaningless init value because python had no do..while"
-      while (self.reader.line_list_aligns != None and self.reader.counter < 4): # the fixed limit is only for debug 
+      while (self.reader.line_list_aligns != None and self.reader.counter < 10000): # the fixed limit is only for debug 
+        if basicDebug:
+          if (self.reader.counter > 0 and self.reader.counter % 500 == 0):
+            sys.stdout.write('Reached line ' + str(self.reader.counter) + ' \n')
         self.reader.load_next_line()
         if (self.reader.line_list_aligns != None):
           # parse phrases using  the dutch sentence, the english sentence and their alignments-list
@@ -50,18 +69,49 @@ class Extractor(object):
                         '\t unique phrases for en: ' + str(self.unique_en) + '\n'+
                         '\t unique pairs: ' + str(self.unique_nl_en) + '\n')
   
-      print self.table_nl_en       
-
+      
+      
+      self.pickleTables()
+      
+      if basicDebug:
+        self.writeTables() 
+  
+  def normalizeTables(self):
+    pass
+  
+  def makeConditionalTables(self):
+    pass
+  
+  def pickleTables(self):
+    f1 = open( table_nl_file, "wb" );
+    f2 = open( table_en_file, "wb" );
+    f3 = open( table_nl_en_file, "wb" );
+    
+    pickle.dump(self.table_nl, f1)
+    pickle.dump(self.table_en, f2)
+    pickle.dump(self.table_nl_en, f3)
+    
+    f1.close()
+    f2.close()
+    f3.close()
+    
+  def writeTables(self):
+    f1 = open( table_nl_en_file[:-4] + '_raw.txt', "wb" );
+    
+    for pair, value in self.table_nl_en.iteritems():
+      f1.write(str(value) + ' : ' + str(pair) + '\n')
+    
+    f1.close()
+    
   #extract phrases from one sentence pair
   def parseSentencePair(self, alignments, list_nl, list_en):
-    sys.stdout.write('\n pair '+ str(self.reader.counter-1) + ':\n')
-    print alignments
-    print list_nl
-    print list_en
-    #string_nl = " ".join(list_nl)
-    #string_en = " ".join(list_en)
-    #print string_nl
-    #print string_en
+    
+    if moreDebug:
+      sys.stdout.write('\n pair '+ str(self.reader.counter-1) + ':\n')
+      print alignments
+      print list_nl
+      print list_en
+
     
     totalExtractedThisPhrase = 0 
     
@@ -84,7 +134,7 @@ class Extractor(object):
         consecutive = self.checkConsecutive(list_enWordsAligned, alignments)
         
         #debug info
-        if(debug):
+        if(moreDebug):
           sys.stdout.write('\n')
           sys.stdout.write(str(list_nlWords) + '==> ' + str(list_enWordsAligned) + '\n')
           sys.stdout.write(self.getSubstring(list_nl, list_nlWords) + 
@@ -113,7 +163,7 @@ class Extractor(object):
           consistent = self.containsIndices(list_nlWords, list_nlWordsAligned)
           
           #debug info
-          if(debug):
+          if(moreDebug):
             sys.stdout.write('Re-mapped dutch words: ' + str(list_nlWordsAligned) + '\n')          
             if(consistent):
               sys.stdout.write('Consistent.\n')
@@ -121,40 +171,77 @@ class Extractor(object):
               sys.stdout.write('NOT consistent.\n')
               
           if consistent:
-            #update stats
-            self.total_extracted = self.total_extracted + 1
+            #update stats and tables
             totalExtractedThisPhrase = totalExtractedThisPhrase + 1            
+            self.addPair(list_nl, list_en, i1,i2, j1, j2) 
 
-            # update tables
-            nlEntry = self.getSubstring(list_nl, range(i1,i2+1)) 
-            enEntry = self.getSubstring(list_en, range(j1,j2+1)) 
-            nl_enEntry = (nlEntry , enEntry) #tuple
-            
-            self.updateTables(nlEntry, enEntry, nl_enEntry)
-
-            # ===> TODO:
+           
             # check for unaligned words in english phrase
             
+            if moreDebug:
+              sys.stdout.write('\nWas consistent: [' + str(j1) + ' , ' + str(j2) + '] (' + self.getSubstring(list_en, range(j1,j2+1)) + ') \n')
             
-            #~j2b = j2 + 1
-            #~while(j2b < min(i1+self.maxPhraseLen, len(list_en))):
-              #~if (self.isEnUnaligned(j2b, alignments)):                
-                #~# add phrase
-            #~
-            #~j2b = j2  
-            #~j1 = j1 - 1            
-            #~while(j1 > 0 and j2b-j1 < self.maxPhraseLen):
-              #~if (self.isEnUnaligned(j1, alignments)):
-                 #~# add phrase
-              #~
-              #~j2b = j2 + 1
+            j2Limit = -1  
+            # increase j2 as far as possible maintaining j1 fixed as i  original
+            j2b = j2 + 1
+            while(j2b < min(j1+self.maxPhraseLen, len(list_en))):
+              if moreDebug:
+                sys.stdout.write('Trying [' + str(j1) + ' , ' + str(j2b) + '] (' + self.getSubstring(list_en, range(j1,j2b+1)) + ') \n')
+              if (self.isEnUnaligned(j2b, alignments)):
+                if moreDebug:
+                  sys.stdout.write('added\n')
+                totalExtractedThisPhrase = totalExtractedThisPhrase + 1                  
+                self.addPair(list_nl, list_en, i1, i2, j1,j2b)
+                j2b = j2b + 1
+              else:
+                j2Limit = j2b
+                break
             
-    
-    if debug:
+            #decrease j1 as far as possible maintaining j2 fixed as in original      
+            j1 = j1 - 1                 
+            while(j1 >= 0 and j2-j1 < self.maxPhraseLen):
+              if moreDebug:
+                sys.stdout.write('Trying [' + str(j1) + ' , ' + str(j2) + '] (' + self.getSubstring(list_en, range(j1,j2+1)) + ') \n')
+              if (self.isEnUnaligned(j1, alignments)):
+                if moreDebug:
+                  sys.stdout.write('added\n')
+                totalExtractedThisPhrase = totalExtractedThisPhrase + 1  
+                self.addPair(list_nl, list_en, i1, i2, j1,j2)
+              
+                # increase j2 as far as possible for this decrease of j1
+                j2b = j2 + 1
+                while (j2b < j2Limit):
+                  if moreDebug:
+                    sys.stdout.write('Trying [' + str(j1) + ' , ' + str(j2b) + '] (' + self.getSubstring(list_en, range(j1,j2b+1)) + ') \n')
+                  if (self.isEnUnaligned(j2b, alignments)):
+                    if moreDebug:
+                      sys.stdout.write('added\n')
+                    totalExtractedThisPhrase = totalExtractedThisPhrase + 1                  
+                    self.addPair(list_nl, list_en, i1, i2, j1,j2b)
+                    j2b = j2b + 1
+                  else:
+                    break
+                
+                j1 = j1 - 1
+                
+              else:
+                break
+                
+    if moreDebug:
       sys.stdout.write('\nWith this sentence pair , \n')
       sys.stdout.write('we have extracted ' + str(totalExtractedThisPhrase) + ' phrase pairs \n')
   
+  
+  def addPair(self, list_nl, list_en, start_nl, end_nl, start_en, end_en):
+    self.total_extracted = self.total_extracted + 1
 
+    # update tables
+    nlEntry = self.getSubstring(list_nl, range(start_nl,end_nl+1)) 
+    enEntry = self.getSubstring(list_en, range(start_en,end_en+1)) 
+    nl_enEntry = (nlEntry , enEntry) #tuple
+    
+    self.updateTables(nlEntry, enEntry, nl_enEntry)
+            
   # update the hash tables (phrase (pair) --> count)
   def updateTables(self, nlString, enString, nl_enString):
     
@@ -305,8 +392,7 @@ class Reader(object):
   def load_next_line(self):
     
     if (self.f_aligns == None):
-      self.load_data()      
-    
+      self.load_data()         
     
     line_aligns = self.f_aligns.readline()
     line_nl = self.f_nl.readline()
@@ -345,30 +431,31 @@ class Main(object):
   """
     main class
     start everything 
-    initialize file names
   """
-  
-  #path = '/Users/nikos/Downloads/aligned-data/'
-  #path = '/run/media/root/ss-ntfs/3.Documents/huiswerk_20122013/SSLP/project1/aligned-data/'
-  path = 'aligned-data/'
-  
-  alignsFileName = 'aligned.nl-en_short'
-  nlFileName = 'europarl.nl-en.nl_short'
-  enFileName = 'europarl.nl-en.en_short'
-  
+    
   reader = Reader(path, alignsFileName, nlFileName, enFileName)
   extractor = Extractor(reader)
   
+  fullPath = os.getcwd() + '/' + path
   
   def __init__(self):
     pass
   
   def run(self):
-    sys.stdout.write('parsing alignments in \"' + self.alignsFileName + 
-                     '\", for \"' + self.nlFileName + '\" and \"' + self.enFileName + 
-                     '\" from directory \"' + self.path + '\"'+ '\n')
+    sys.stdout.write('===================================================\n' +
+                     'parsing alignments in \"' + alignsFileName + '\"\n' +
+                     'for \"' + nlFileName + '\" and \"' + enFileName + '\"\n'+ 
+                     'from directory \"' + self.fullPath + '\"'+ '\n' +
+                     '===================================================\n')
 
     self.extractor.extract()
+    
+ 
+    sys.stdout.write('===================================================\n' +
+                     'have parsed alignments in \"' + alignsFileName + '\"\n' +
+                     'for \"' + nlFileName + '\" and \"' + enFileName + '\"\n'+  
+                     'from directory \"' + self.fullPath + '\"'+ '\n'+
+                     '===================================================\n')
 
 ### used to call Main.run()
 if __name__ == '__main__': #if this file is called by python test.py
