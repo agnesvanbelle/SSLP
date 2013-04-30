@@ -21,7 +21,7 @@ table_en_file = 'table_en.dat'
 table_nl_en_file = 'table_nl_en.dat'
 
 
-MAXIMUM_READ_SENTENCES = float("inf") #10000 # for testing purposes
+MAXIMUM_READ_SENTENCES = 100000 #float("inf") #10000 # for testing purposes
 
 """ 
   The Main class contains filenames (could be extended to use command-line arguments) and starts everything
