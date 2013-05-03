@@ -21,7 +21,7 @@ table_en_file = 'table_en.dat'
 table_nl_en_file = 'table_nl_en.dat'
 
 
-MAXIMUM_READ_SENTENCES = 100000 #float("inf") #10000 # for testing purposes
+MAXIMUM_READ_SENTENCES = 1000000 #float("inf") #10000 # for testing purposes
 
 """ 
   The Main class contains filenames (could be extended to use command-line arguments) and starts everything
@@ -94,8 +94,14 @@ class PhraseTables(object):
     f3 = open(tablePath +  table_nl_en_file, "rb")
     
     self.table_nl = pickle.load( f1 )
+    if basicDebug:
+        sys.stdout.write(table_nl_file + ' read.\n')
     self.table_en = pickle.load( f2 )
+    if basicDebug:
+        sys.stdout.write(table_en_file + ' read.\n')
     self.table_nl_en = pickle.load( f3 )
+    if basicDebug:
+        sys.stdout.write(table_nl_en_file + ' read.\n')
     
     f1.close()
     f2.close()
