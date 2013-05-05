@@ -5,15 +5,15 @@ import cPickle as pickle
 
 
 alignDir = 'aligned-data/'
-tableDir = 'tables/'
+tableDir = 'tables_old/'
 
 
-alignsFileName = 'aligned.nl-en2'
-nlFileName = 'europarl.nl-en.nl2'
-enFileName = 'europarl.nl-en.en2'
+alignsFileName = 'aligned.nl-en_short'
+nlFileName = 'europarl.nl-en.nl_short'
+enFileName = 'europarl.nl-en.en_short'
 
 basicDebug = True
-moreDebug = False
+moreDebug = True
 
 
 table_nl_file = 'table_nl.dat'
@@ -21,7 +21,7 @@ table_en_file = 'table_en.dat'
 table_nl_en_file = 'table_nl_en.dat'
 
 
-MAXIMUM_READ_SENTENCES = 1000000  #10000 # for testing purposes
+MAXIMUM_READ_SENTENCES = 1 #float("inf") #10000 # for testing purposes
 
 """
   The Main class contains filenames (could be extended to use command-line arguments) and starts everything
@@ -236,208 +236,126 @@ class Extractor(object):
       print list_nl
       print list_en
 
-    
 
-    
     totalExtractedThisPhrase = 0
-    
-    len_list_nl = len(list_nl)
-    len_list_en = len(list_en)
-    len_alignments = len(alignments)
-    
-    nl_to_en = [[100, -1] for i in range(len_list_nl)] #[minimum, maximum]
-    en_to_nl = [[100, -1] for i in range(len_list_en)]
-    
-    #print nl_to_en
-    
-    for a_pair in alignments:
-      #print a_pair
-      
-      nl_index = a_pair[0]
-      en_index = a_pair[1]
-      
-      #sys.stdout.write('nl_index: ' + str(nl_index) + '\n')
-      
-      
-      nl_to_en[nl_index][0] = min(en_index, nl_to_en[nl_index][0])
-      nl_to_en[nl_index][1] = max(en_index, nl_to_en[nl_index][1])
-      
-      en_to_nl[en_index][0] = min(nl_index, en_to_nl[en_index][0])
-      en_to_nl[en_index][1] = max(nl_index, en_to_nl[en_index][1])
-      
-      
-      
-      
-    if moreDebug:
-      print nl_to_en
-      print en_to_nl
-    
-    
-    
-    
-    for nl_index1 in range(0, len_list_nl-1): # do not check the period at the end
-      if moreDebug:
-        sys.stdout.write('nl_index1: ' + str(nl_index1) + '\n')
-      
-      
-      enRange = nl_to_en[nl_index1]
-      
-      if (enRange != [100, -1]): #if aligned
-        
-        nlFromEnMin = min(en_to_nl[enRange[0]][0], en_to_nl[enRange[1]][0])
-        nlFromEnMax = max(en_to_nl[enRange[0]][1], en_to_nl[enRange[1]][1])
-        
-        nl_index2 = nl_index1
-        while(nl_index2 < min(nl_index1 + self.maxPhraseLen, len_list_nl)):
-          if moreDebug:
-            sys.stdout.write('\tnl_index2: ' + str(nl_index2) + ', ')
-            sys.stdout.write('\tchecking: ' + self.getSubstring(list_nl, range(nl_index1, nl_index2+1)) + '\n')
-          
-          enRangeThisIndex = nl_to_en[nl_index2]
-          
-          if (enRangeThisIndex != [100, -1]):
-            enRange = [min(enRange[0], enRangeThisIndex[0]), max(enRange[1], enRangeThisIndex[1])]
-            
-            if (enRange[1] - enRange[0] < self.maxPhraseLen):
-              nlFromEnMin = min(nlFromEnMin, en_to_nl[enRange[0]][0], en_to_nl[enRange[1]][0])
-              nlFromEnMax = max(nlFromEnMax, en_to_nl[enRange[0]][1], en_to_nl[enRange[1]][1])
-              
-              
-              if nlFromEnMin < nl_index1:
-                if moreDebug:
-                  sys.stdout.write('\tnlFromEnMin < nl_index1: ' + str(nlFromEnMin) + ' < ' + str(nl_index1) + '\n')
-                break
-                
-              elif nlFromEnMax > nl_index2:
-                if moreDebug:
-                  sys.stdout.write('\tnlFromEnMax > nl_index2: ' + str(nlFromEnMax) + ' > ' + str(nl_index2) + '\n')       
-                nl_index2 = nlFromEnMax                     
-                continue
-              
-              
-              
-              # got one
-              elif [nl_index1, nl_index2] == [nlFromEnMin, nlFromEnMax] :
-                if moreDebug:
-                  sys.stdout.write ('\t' + str([nl_index1, nl_index2]) + ' == ' + str([nlFromEnMin, nlFromEnMax]) + '\n')
-                  sys.stdout.write ('\t'+ self.getSubstring(list_nl, range(nl_index1, nl_index2+1)) + ' == ')
-                  sys.stdout.write ( self.getSubstring(list_en, range(enRange[0], enRange[1]+1)) + '\n')
-                              
-                
-                self.addPair(list_nl, list_en, nl_index1, nl_index2, enRange[0], enRange[1])
-                totalExtractedThisPhrase += 1
-                
-                
-                
-                
-                ####################
-                #check for unaligned 
-                ######################
-                nl_unaligned_list = []    
-                en_unaligned_list = []
-                
-                ## unaligned on dutch  side                                
-                #above unlimited         
-                nl_index2_copy = nl_index2 + 1
-                while nl_index2_copy < min(nl_index1 + self.maxPhraseLen, len_list_nl) and nl_to_en[nl_index2_copy] == [100, -1] :
-                  nl_unaligned_list.append([nl_index1, nl_index2_copy])
-                  nl_index2_copy += 1
-                
-                # below unlimited
-                nl_index1_copy = nl_index1 - 1
-                while nl_index1_copy >= 0  and nl_to_en[nl_index1_copy] == [100,-1] :
-                  nl_unaligned_list.append([nl_index1_copy, nl_index2])
-                  
-                  # above unlimited for this below-level
-                  nl_index2_copy = nl_index2 + 1
-                  while nl_index2_copy < min(nl_index1_copy + self.maxPhraseLen, len_list_nl)  and nl_to_en[nl_index2_copy] == [100, -1] :
-                    nl_unaligned_list.append([nl_index1_copy, nl_index2_copy])
-                    nl_index2_copy += 1                    
-                  
-                  nl_index1_copy -= 1
 
-                ## unaligned on english  side
-                en_index1 = enRange[0]
-                en_index2 = enRange[1] 
-                             
-                #above unlimited         
-                en_index2_copy = en_index2 + 1
-                while en_index2_copy < min(en_index1 + self.maxPhraseLen, len_list_en) and en_to_nl[en_index2_copy] == [100, -1] :
-                  en_unaligned_list.append([en_index1, en_index2_copy])
-                  en_index2_copy += 1
-                
-                # below unlimited
-                en_index1_copy = en_index1 - 1
-                while en_index1_copy >= 0  and en_to_nl[en_index1_copy] == [100,-1] :
-                  en_unaligned_list.append([en_index1_copy, en_index2])
-                  
-                  # above unlimited for this below-level
-                  en_index2_copy = en_index2 + 1
-                  while en_index2_copy < min(en_index1_copy + self.maxPhraseLen, len_list_en)  and en_to_nl[en_index2_copy] == [100, -1] :
-                    en_unaligned_list.append([en_index1_copy, en_index2_copy])
-                    en_index2_copy += 1                    
-                  
-                  en_index1_copy -= 1
-                  
-                if moreDebug:
-                  sys.stdout.write('\tunaligned nl list: ' + str(nl_unaligned_list) + '\n')
-                  sys.stdout.write('\tunaligned en list: ' + str(en_unaligned_list) + '\n')
-                
-                # add unaligned nl's for current english phrase
-                for unaligned_nl in nl_unaligned_list :
-                  self.addPair(list_nl, list_en, unaligned_nl[0], unaligned_nl[1], enRange[0], enRange[1])
-                  totalExtractedThisPhrase += 1
-                # add unaligned en's for current dutch phrase
-                for unaligned_en in en_unaligned_list :
-                  self.addPair(list_nl, list_en, nl_index1, nl_index2, unaligned_en[0], unaligned_en[1])
-                  totalExtractedThisPhrase += 1
-                  # add unaliged nl / unaligned en combi's
-                  for unaligned_nl in nl_unaligned_list :
-                    self.addPair(list_nl, list_en, unaligned_nl[0], unaligned_nl[1], unaligned_en[0], unaligned_en[1])
-                    totalExtractedThisPhrase += 1
-              
-              
-              else : #it wasnt a  valid phrase pair
-                if moreDebug: 
-                  sys.stdout.write ('\t' + str([nl_index1, nl_index2]) + ' != ' + str([nlFromEnMin, nlFromEnMax]) + '\n')
-                  sys.stdout.write ('\t'+ self.getSubstring(list_nl, range(nl_index1, nl_index2+1)) + ' != ' )
-                  sys.stdout.write ( self.getSubstring(list_en, range(enRange[0], enRange[1]+1)) + '\n')
-                
-            else:
-              if moreDebug:
-                sys.stdout.write ('\t too long: ' + self.getSubstring(list_en, range(enRange[0], enRange[1]+1)) + '\n')
-              break
-              
+    for i1 in range(0, len(list_nl)):
+      for i2 in range(i1, min(i1+self.maxPhraseLen, len(list_nl))):
+
+        # the considered dutch words
+        list_nlWords = range(i1, i2+1)
+
+        # get the english words aligned to the considered dutch words
+        list_enWordsAligned = []
+        for i in list_nlWords:
+          list_enWordsAligned.extend(self.get_possible_alignments(alignments, i, 'nl'))
+
+        list_enWordsAligned.sort()
+
+        #check if the set of english words are consecutive with the exception
+        #of possible unaligned words (i.e. the indices of the found aligned english words
+        #can skip a number so long as that number is also not in the full alignments list)
+        consecutive = self.checkConsecutive(list_enWordsAligned, alignments)
+
+        #debug info
+        if(moreDebug):
+          sys.stdout.write('\n')
+          sys.stdout.write(str(list_nlWords) + '==> ' + str(list_enWordsAligned) + '\n')
+          sys.stdout.write(self.getSubstring(list_nl, list_nlWords) +
+                            ' ==> ' +
+                            self.getSubstring(list_en, list_enWordsAligned) + '\n')
+          if (consecutive):
+            sys.stdout.write('is consecutive\n')
           else:
+            sys.stdout.write('is NOT consecutive\n')
+
+
+        if(consecutive):
+          # check the other way: if the aligned english words (j's) also map
+          # only to the considered, consecutive, dutch words (i's) (list_nlWords)
+          j1 = list_enWordsAligned[0]
+          j2 = list_enWordsAligned[-1]
+
+          list_nlWordsAligned = []
+
+          for j in range(j1, j2+1):
+            list_nlWordsAligned.extend(self.get_possible_alignments(alignments, j, 'en'))
+
+          list_nlWordsAligned.sort()
+
+          # if so, the alignment is consistent
+          consistent = self.containsIndices(list_nlWords, list_nlWordsAligned)
+
+          #debug info
+          if(moreDebug):
+            sys.stdout.write('Re-mapped dutch words: ' + str(list_nlWordsAligned) + '\n')
+            if(consistent):
+              sys.stdout.write('Consistent.\n')
+            else:
+              sys.stdout.write('NOT consistent.\n')
+
+          if consistent:
+            #update stats and tables
+            totalExtractedThisPhrase = totalExtractedThisPhrase + 1
+            self.addPair(list_nl, list_en, i1,i2, j1, j2)
+
+
+            # check for unaligned words in english phrase
+
             if moreDebug:
-              sys.stdout.write('\t ' + str(nl_index2) + ' is unaligned\n')
-            
-          if moreDebug:
-            sys.stdout.write('we have extracted ' + str(totalExtractedThisPhrase) + ' phrase pairs \n')
-            
-          nl_index2 +=1
-        
-        
-        
-    self.addPeriod()
-      
-    #~if moreDebug:
-      #~sys.stdout.write('\nWith this sentence pair , \n')
-      #~sys.stdout.write('we have extracted ' + str(totalExtractedThisPhrase) + ' phrase pairs \n')
+              sys.stdout.write('\nWas consistent: [' + str(j1) + ' , ' + str(j2) + '] (' + self.getSubstring(list_en, range(j1,j2+1)) + ') \n')
+
+            j2Limit = -1
+            # increase j2 as far as possible maintaining j1 fixed as i  original
+            j2b = j2 + 1
+            while(j2b < min(j1+self.maxPhraseLen, len(list_en))):
+              if moreDebug:
+                sys.stdout.write('Trying [' + str(j1) + ' , ' + str(j2b) + '] (' + self.getSubstring(list_en, range(j1,j2b+1)) + ') \n')
+              if (self.isEnUnaligned(j2b, alignments)):
+                if moreDebug:
+                  sys.stdout.write('added\n')
+                totalExtractedThisPhrase = totalExtractedThisPhrase + 1
+                self.addPair(list_nl, list_en, i1, i2, j1,j2b)
+                j2b = j2b + 1
+              else:
+                j2Limit = j2b
+                break
+
+            #decrease j1 as far as possible maintaining j2 fixed as in original
+            j1 = j1 - 1
+            while(j1 >= 0 and j2-j1 < self.maxPhraseLen):
+              if moreDebug:
+                sys.stdout.write('Trying [' + str(j1) + ' , ' + str(j2) + '] (' + self.getSubstring(list_en, range(j1,j2+1)) + ') \n')
+              if (self.isEnUnaligned(j1, alignments)):
+                if moreDebug:
+                  sys.stdout.write('added\n')
+                totalExtractedThisPhrase = totalExtractedThisPhrase + 1
+                self.addPair(list_nl, list_en, i1, i2, j1,j2)
+
+                # increase j2 as far as possible for this decrease of j1
+                j2b = j2 + 1
+                while (j2b < j2Limit):
+                  if moreDebug:
+                    sys.stdout.write('Trying [' + str(j1) + ' , ' + str(j2b) + '] (' + self.getSubstring(list_en, range(j1,j2b+1)) + ') \n')
+                  if (self.isEnUnaligned(j2b, alignments)):
+                    if moreDebug:
+                      sys.stdout.write('added\n')
+                    totalExtractedThisPhrase = totalExtractedThisPhrase + 1
+                    self.addPair(list_nl, list_en, i1, i2, j1,j2b)
+                    j2b = j2b + 1
+                  else:
+                    break
+
+                j1 = j1 - 1
+
+              else:
+                break
+
+    if moreDebug:
+      sys.stdout.write('\nWith this sentence pair , \n')
+      sys.stdout.write('we have extracted ' + str(totalExtractedThisPhrase) + ' phrase pairs \n')
 
 
-                
-  # why not
-  def addPeriod(self):
-    self.total_extracted = self.total_extracted + 1
-
-    # update tables
-    nlEntry = '.'
-    enEntry = '.'
-    nl_enEntry = ('.' , '.') #tuple
-
-    self.updateTables(nlEntry, enEntry, nl_enEntry)
-    
   def addPair(self, list_nl, list_en, start_nl, end_nl, start_en, end_en):
     self.total_extracted = self.total_extracted + 1
 
@@ -654,17 +572,15 @@ class Main(object):
     pass
 
   def run(self):
-    self.phraseTables.getFromExtractor(self.extractor)
+    self.initPhraseTables()
+    sys.stdout.write( 'log(Pr(\"and\" | \"en\")) = ' + str(self.phraseTables.getConditionalProbabilityEn('en', 'and', True)) + '\n')
+    sys.stdout.write( 'Pr(\"and\" | \"en\") = ' + str(self.phraseTables.getConditionalProbabilityEn('en', 'and', False)) + '\n')
 
-    #self.initPhraseTables()
-    #~sys.stdout.write( 'log(Pr(\"and\" | \"en\")) = ' + str(self.phraseTables.getConditionalProbabilityEn('en', 'and', True)) + '\n')
-    #~sys.stdout.write( 'Pr(\"and\" | \"en\") = ' + str(self.phraseTables.getConditionalProbabilityEn('en', 'and', False)) + '\n')
-#~
-    #~sys.stdout.write( 'log(Pr(\"en\" | \"and\")) = ' + str(self.phraseTables.getConditionalProbabilityNl('en', 'and', True)) + '\n')
-    #~sys.stdout.write( 'Pr(\"en\" | \"and\") = ' + str(self.phraseTables.getConditionalProbabilityNl('en', 'and', False)) + '\n')
-#~
-#~
-    #~sys.stdout.write( 'Pr(\"en\" , \"and\") = ' + str(self.phraseTables.getJointProbability('en', 'and', False)) + '\n')
+    sys.stdout.write( 'log(Pr(\"en\" | \"and\")) = ' + str(self.phraseTables.getConditionalProbabilityNl('en', 'and', True)) + '\n')
+    sys.stdout.write( 'Pr(\"en\" | \"and\") = ' + str(self.phraseTables.getConditionalProbabilityNl('en', 'and', False)) + '\n')
+
+
+    sys.stdout.write( 'Pr(\"en\" , \"and\") = ' + str(self.phraseTables.getJointProbability('en', 'and', False)) + '\n')
 
   def initPhraseTables(self):
 
