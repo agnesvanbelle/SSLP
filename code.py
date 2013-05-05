@@ -2,18 +2,18 @@ import sys
 import os
 import math
 import cPickle as pickle
-
+import gc
 
 alignDir = 'aligned-data/'
-tableDir = 'tables/'
+tableDir = 'tables_new/'
 
 
-alignsFileName = 'aligned.nl-en2'
-nlFileName = 'europarl.nl-en.nl2'
-enFileName = 'europarl.nl-en.en2'
+alignsFileName = 'aligned.nl-en_short'
+nlFileName = 'europarl.nl-en.nl_short'
+enFileName = 'europarl.nl-en.en_short'
 
 basicDebug = True
-moreDebug = False
+moreDebug = True
 
 
 table_nl_file = 'table_nl.dat'
@@ -21,7 +21,9 @@ table_en_file = 'table_en.dat'
 table_nl_en_file = 'table_nl_en.dat'
 
 
-MAXIMUM_READ_SENTENCES = 1000000  #10000 # for testing purposes
+MAXIMUM_READ_SENTENCES = 2  #10000 # for testing purposes
+
+gc.disable()
 
 """
   The Main class contains filenames (could be extended to use command-line arguments) and starts everything
@@ -266,14 +268,13 @@ class Extractor(object):
       en_to_nl[en_index][1] = max(nl_index, en_to_nl[en_index][1])
       
       
-      
+    del nl_index
+    del en_index
       
     if moreDebug:
       print nl_to_en
       print en_to_nl
-    
-    
-    
+      
     
     for nl_index1 in range(0, len_list_nl-1): # do not check the period at the end
       if moreDebug:
@@ -295,6 +296,7 @@ class Extractor(object):
           
           enRangeThisIndex = nl_to_en[nl_index2]
           
+          
           if (enRangeThisIndex != [100, -1]):
             enRange = [min(enRange[0], enRangeThisIndex[0]), max(enRange[1], enRangeThisIndex[1])]
             
@@ -310,10 +312,12 @@ class Extractor(object):
                 
               elif nlFromEnMax > nl_index2:
                 if moreDebug:
-                  sys.stdout.write('\tnlFromEnMax > nl_index2: ' + str(nlFromEnMax) + ' > ' + str(nl_index2) + '\n')       
-                nl_index2 = nlFromEnMax                     
-                continue
-              
+                  sys.stdout.write('\tnlFromEnMax > nl_index2: ' + str(nlFromEnMax) + ' > ' + str(nl_index2) + '\n')                
+                nl_index2 = nlFromEnMax   
+                if nl_index2 - nl_index1 < self.maxPhraseLen :                  
+                  continue
+                else :
+                  break
               
               
               # got one
@@ -409,6 +413,7 @@ class Extractor(object):
               break
               
           else:
+            
             if moreDebug:
               sys.stdout.write('\t ' + str(nl_index2) + ' is unaligned\n')
             
@@ -490,73 +495,7 @@ class Extractor(object):
     wordList = map((lambda x : line_list[x]), aligned_list)
     return " ".join(wordList)
 
-  # note alignments are ordered on english order (y)
-  # and the list of english words (indices) should be sorted before too
-  # otherwise this doesn't work!
-  def checkConsecutive(self, list_enWords, alignments):
 
-    lenAlignments = len(alignments)
-    lenEnWords = len(list_enWords)
-
-    if (lenEnWords== 0): # no aligned words
-      return False
-
-    for i in range(0, lenAlignments):
-      alignment_pair = alignments[i]
-
-      if (alignment_pair[1] > list_enWords[0]):
-        break
-      if (alignment_pair[1] == list_enWords[0]):
-        alignments2 = alignments
-        j = 0
-        while(j < lenEnWords):
-          if (alignments2[i+j][1] != list_enWords[0+j]):
-            break
-          j = j + 1
-        if (j == lenEnWords):
-          return True
-    return False
-
-  #not used
-  #def containsSublist(self, lst, sublst):
-    #n = len(sublst)
-    #return any((sublst == lst[i:i+n]) for i in xrange(len(lst)-n+1))
-
-  #checks if all (posisble duplicates) elements of nlWordsAligned
-  #are a member of nlWords
-  #assumes both lists of indices are sorted
-  def containsIndices(self, nlWords, nlWordsAligned):
-    lenNlWordsAligned = len(nlWordsAligned)
-    lenNlWords = len(nlWords)
-
-    i = 0
-    j = 0
-
-    while (i < lenNlWordsAligned and j < lenNlWords):
-      if (nlWordsAligned[i] < nlWords[j]): # e.g. (24, 25, 25) can never be subset of (25, 26, 27)
-        #sys.stdout.write(str(nlWordsAligned[i]) + ' < ' + str(nlWords[j]))
-        return False
-
-      if (nlWordsAligned[i] == nlWords[j]):
-        i = i + 1
-      else:
-        j = j + 1
-
-    return True
-
-  #not used
-  #returns the list of tuples sorted by the second element
-  #def sort_by_y(self, list_aligns):
-  #  return sorted(list_aligns, key=lambda x : x[1])
-
-  #returns all the possible alignments of an element
-  #to return all the possible alignments of element y, use sort_by_y() first
-  #^it traverses whole list so sorting not needed
-  def get_possible_alignments(self, list_aligns, nr, language):
-    if (language == 'en'): #source language
-      return [item[0] for item in list_aligns if item[1]==nr]
-    else:
-      return [item[1] for item in list_aligns if item[0]==nr]
 
 
 class Reader(object):
@@ -656,7 +595,7 @@ class Main(object):
   def run(self):
     self.phraseTables.getFromExtractor(self.extractor)
 
-    #self.initPhraseTables()
+   #self.initPhraseTables()
     #~sys.stdout.write( 'log(Pr(\"and\" | \"en\")) = ' + str(self.phraseTables.getConditionalProbabilityEn('en', 'and', True)) + '\n')
     #~sys.stdout.write( 'Pr(\"and\" | \"en\") = ' + str(self.phraseTables.getConditionalProbabilityEn('en', 'and', False)) + '\n')
 #~
