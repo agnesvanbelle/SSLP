@@ -3,17 +3,7 @@ import os
 import math
 import cPickle as pickle
 import gc
-
-alignDir = 'aligned-data/'
-tableDir = 'tables_new/'
-
-
-alignsFileName = 'aligned.nl-en_short'
-nlFileName = 'europarl.nl-en.nl_short'
-enFileName = 'europarl.nl-en.en_short'
-
-basicDebug = True
-moreDebug = True
+import itertools
 
 
 table_nl_file = 'table_nl.dat'
@@ -21,7 +11,16 @@ table_en_file = 'table_en.dat'
 table_nl_en_file = 'table_nl_en.dat'
 
 
-MAXIMUM_READ_SENTENCES = 2  #10000 # for testing purposes
+
+
+basicDebug = True
+moreDebug = False
+writeRawFiles = True
+
+
+
+
+MAXIMUM_READ_SENTENCES = 100000  #10000 # for testing purposes
 
 gc.disable()
 
@@ -31,17 +30,13 @@ gc.disable()
   The Extractor class extracts phrases (using Reader)
   The PhraseTables class hold the phrase tables
 
-  In 'Extractor.parseSentencePair(..)':
-  i1, i2 = dutch indices
-  j1, j2 = english indices
-  (i.e. treat dutch as source)
 
 """
 
 class PhraseTables(object):
   """
     holds the phrase tables
-    has methods to caulculate conditional probabilities etc.
+    has methods to caulculate the conditional probabilities 
   """
 
   # phrase tables are dictionaries
@@ -50,6 +45,7 @@ class PhraseTables(object):
   table_nl_en = {} # contains log(pr(nl, en)) for all dutch&english phrase pairs
                     #from these three, pr(nl | en) and pr(en | nl) can be computed
 
+  
   def __init__(self):
     pass
 
@@ -90,7 +86,7 @@ class PhraseTables(object):
     return 0 # given en & nl phrase pair did not occur in table
 
   # get phrase tables from files
-  def readFromFiles(self, tablePath):
+  def readFromFiles(self, tablePath ):
     f1 = open(tablePath +  table_nl_file, "rb")
     f2 = open(tablePath +  table_en_file, "rb")
     f3 = open(tablePath +  table_nl_en_file, "rb")
@@ -110,11 +106,152 @@ class PhraseTables(object):
     f3.close()
 
   # get phrase tables from given Extractor object
-  def getFromExtractor(self, extractor):
+  def getFromExtractor(self, tablePath, alignPath, alignsFileName, nlFileName, enFileName):
+    reader = Reader(alignPath, alignsFileName, nlFileName, enFileName)
+    extractor = Extractor(reader, tablePath)
+    
     extractor.extract()
+    
     self.table_nl = extractor.table_nl
     self.table_en = extractor.table_en
     self.table_nl_en = extractor.table_nl_en
+
+
+class CoverageComputer(object):
+  
+  phraseTablesTrain = None
+  phraseTablesTest = None
+  maxConcatenations = 3
+  
+  # pt1 = of which you want to compute the coverage. 
+  # pt2 = contains the phrases used to compute coverage
+  def __init__(self, pt1, pt2):
+    self.phraseTablesTrain = pt1
+    self.phraseTablesTest = pt2
+  
+  def calcCoverageSimple (self):
+  
+    total = 0
+    found = 0  
+
+    for phrasePair in self.phraseTablesTest.table_nl_en:   
+      total += 1
+
+      if phrasePair in self.phraseTablesTrain.table_nl_en:
+        found += 1    
+  
+    sys.stdout.write(str( float(found)) + ' / ' + str(total) + ' = ' +  str(float(found)/total) + '\n')
+    return float(found)/total 
+    
+
+  
+  def calcCoverageWithConcatenations (self):
+    
+    total = 0
+    found = 0
+        
+    for phrasePair in self.phraseTablesTest.table_nl_en:
+      
+      nl = phrasePair[0]
+      en = phrasePair[1]
+      total += 1
+      
+      for n in range(1, self.maxConcatenations+1):
+        
+        if n == 1:
+          
+          if phrasePair in self.phraseTablesTrain.table_nl_en :
+            found += 1
+            sys.stdout.write('found at n='+str(n)+'\n')
+            break
+        
+        else :
+          
+          if self.check_coverage(nl, en, n) : 
+            found += 1
+            sys.stdout.write('found at n='+str(n)+'\n')
+            break
+    
+    sys.stdout.write(str( float(found)) + ' / ' + str(total) + ' = ' +  str(float(found)/total) + '\n')
+    return float(found)/total 
+  
+  
+  #checks if a partition of a phrase is valid (every phrase is in the hashtable)
+  def valid_en (self, partition_pairs):
+    for x in partition_pairs:
+      if x not in self.phraseTablesTrain.table_en:
+        return False
+    return True
+
+  def get_valid_partitions_en(self, partitions):
+    return [x for x in partitions if self.valid_en(x)]
+
+  def valid_nl (self, partition_pairs):
+    for x in partition_pairs:
+      if x not in self.phraseTablesTrain.table_nl:
+        return False
+    return True
+
+  def get_valid_partitions_nl(self, partitions):
+    return [x for x in partitions if self.valid_nl(x)]
+    
+  def part2(self, x, len_x):
+    y = []
+    #n = len(x)
+    for i in range(1, len_x):
+      y.append((x[0:i], x[i:len_x]))
+    return y
+
+  def part3(self, x, len_x):
+    y = []
+    for i in range(1, len_x):
+      for j in range(i+1, len_x):
+        y.append((x[0:i], x[i:j], x[j:len_x]))
+    return y
+
+  def partitions(self, x,n):
+    len_x = len(x)
+    if n == 2:
+      partitions = self.part2(x, len_x)
+    elif n == 3:
+      partitions = self.part3(x, len_x)
+    return partitions
+
+
+  def valid_pair(self, a, len_a, p):
+    #n = len(a)
+    for i in range(0,len_a):
+      if (a[i],p[i]) not in self.phraseTables.table_nl_en:
+        return False
+    return True
+
+  # x is the dutch phrase !
+  #checks coverage of the phrase pair for n = 2 to 3
+  #table_x : hashtable of 'x' language
+  #table_y : hashtable of 'y' language
+  #table_x_y : hashtable for ('x','y') phrase pairs
+  def check_coverage(self, x, y, i):
+    #for i in range(2,self.maxConcatenations+1):
+    #x, y = phrase_pair
+    x_partitions = self.partitions(x, i)
+    x_partitions = self.get_valid_partitions_nl(x_partitions) 
+    y_partitions = self.partitions(y, i)
+    y_partitions = self.get_valid_partitions_en(y_partitions)
+    for a in x_partitions :
+      len_a = len(a)
+      print a
+      for b in y_partitions:
+        print b
+        perms = itertools.permutations(b)
+        for p in perms:
+          print p
+          if self.valid_pair(a, len_a, p):
+            print 'valid:'
+            print a
+            print b
+            return True
+    return False
+
 
 
 class Extractor(object):
@@ -135,10 +272,11 @@ class Extractor(object):
   unique_en = 0
   unique_nl_en = 0
 
-  def __init__(self, reader, tablePath):
+  def __init__(self, reader, tablePath ):
     self.reader = reader
     self.tablePath = tablePath
-
+   
+    
     if not os.path.exists(tablePath):
       os.makedirs(tablePath)
 
@@ -168,7 +306,7 @@ class Extractor(object):
       self.normalizeTables() #make probabilities of the counts
       self.pickleTables()
 
-      if basicDebug:
+      if writeRawFiles:
         self.writeTables()
 
       sys.stdout.write('Done writing to files.\n')
@@ -200,8 +338,14 @@ class Extractor(object):
     f3 = open( self.tablePath +  table_nl_en_file, "wb" );
 
     pickle.dump(self.table_nl, f1)
+    if basicDebug:
+        sys.stdout.write(table_nl_file + ' pickled.\n')
     pickle.dump(self.table_en, f2)
+    if basicDebug:
+        sys.stdout.write(table_en_file + ' pickled.\n')
     pickle.dump(self.table_nl_en, f3)
+    if basicDebug:
+        sys.stdout.write(table_nl_en_file + ' pickled.\n')
 
     f1.close()
     f2.close()
@@ -217,12 +361,16 @@ class Extractor(object):
 
     for nl, value in self.table_nl.iteritems():
       f1.write(str(value) + ' : ' + str(nl) + '\n')
-
+    if basicDebug:
+        sys.stdout.write(table_nl_file[:-4] + '_raw.txt' + ' written.\n')
     for en, value in self.table_en.iteritems():
       f2.write(str(value) + ' : ' + str(en) + '\n')
-
+    if basicDebug:
+        sys.stdout.write(table_en_file[:-4] + '_raw.txt' + ' written.\n')
     for pair, value in self.table_nl_en.iteritems():
       f3.write(str(value) + ' : ' + str(pair) + '\n')
+    if basicDebug:
+        sys.stdout.write(table_nl_en_file[:-4] + '_raw.txt' + ' written.\n')
 
     f1.close()
     f2.close()
@@ -283,7 +431,7 @@ class Extractor(object):
       
       enRange = nl_to_en[nl_index1]
       
-      if (enRange != [100, -1]): #if aligned
+      if (enRange != [100, -1]): #if nl start-word is aligned
         
         nlFromEnMin = min(en_to_nl[enRange[0]][0], en_to_nl[enRange[1]][0])
         nlFromEnMax = max(en_to_nl[enRange[0]][1], en_to_nl[enRange[1]][1])
@@ -297,30 +445,33 @@ class Extractor(object):
           enRangeThisIndex = nl_to_en[nl_index2]
           
           
-          if (enRangeThisIndex != [100, -1]):
+          if (enRangeThisIndex != [100, -1]): #if nl end-word is aligned
+            # update the nl-to-en range
             enRange = [min(enRange[0], enRangeThisIndex[0]), max(enRange[1], enRangeThisIndex[1])]
             
             if (enRange[1] - enRange[0] < self.maxPhraseLen):
+              # update the nl-to-en-to-nl range
               nlFromEnMin = min(nlFromEnMin, en_to_nl[enRange[0]][0], en_to_nl[enRange[1]][0])
               nlFromEnMax = max(nlFromEnMax, en_to_nl[enRange[0]][1], en_to_nl[enRange[1]][1])
               
-              
+              # nl-to-en-to-nl range minimum is below nl-range minimum
               if nlFromEnMin < nl_index1:
                 if moreDebug:
                   sys.stdout.write('\tnlFromEnMin < nl_index1: ' + str(nlFromEnMin) + ' < ' + str(nl_index1) + '\n')
                 break
                 
+              # nl-to-en-to-nl range maximum is above nl-range maximum
               elif nlFromEnMax > nl_index2:
                 if moreDebug:
-                  sys.stdout.write('\tnlFromEnMax > nl_index2: ' + str(nlFromEnMax) + ' > ' + str(nl_index2) + '\n')                
+                  sys.stdout.write('\tnlFromEnMax > nl_index2: ' + str(nlFromEnMax) + ' > ' + str(nl_index2) + '\n')   
+                # next nl end-word is the one on the nl-to-en-to-nl range maximum (if within range)
                 nl_index2 = nlFromEnMax   
                 if nl_index2 - nl_index1 < self.maxPhraseLen :                  
                   continue
                 else :
                   break
               
-              
-              # got one
+              # nl-to-en-to-nl range is same as nl-to-en range: got consistent pair
               elif [nl_index1, nl_index2] == [nlFromEnMin, nlFromEnMax] :
                 if moreDebug:
                   sys.stdout.write ('\t' + str([nl_index1, nl_index2]) + ' == ' + str([nlFromEnMin, nlFromEnMax]) + '\n')
@@ -401,7 +552,7 @@ class Extractor(object):
                     totalExtractedThisPhrase += 1
               
               
-              else : #it wasnt a  valid phrase pair
+              else : #it wasnt a consistent phrase pair
                 if moreDebug: 
                   sys.stdout.write ('\t' + str([nl_index1, nl_index2]) + ' != ' + str([nlFromEnMin, nlFromEnMax]) + '\n')
                   sys.stdout.write ('\t'+ self.getSubstring(list_nl, range(nl_index1, nl_index2+1)) + ' != ' )
@@ -542,8 +693,10 @@ class Reader(object):
     line_aligns = self.f_aligns.readline()
     line_nl = self.f_nl.readline()
     line_en = self.f_en.readline()
-
-    if not line_aligns: #EOF
+    
+   
+    
+    if not line_aligns: #EOF      
       sys.stdout.write('\nEnd of files reached\n')
       self.f_aligns.close()
       self.f_nl.close()
@@ -551,6 +704,8 @@ class Reader(object):
       self.line_list_aligns = None
 
     else:
+      
+    
       self.line_list_aligns = self.get_align_list(line_aligns)
       self.line_nl_words = self.get_words (line_nl)
       self.line_en_words = self.get_words (line_en)
@@ -582,20 +737,26 @@ class Main(object):
 
 
 
-  alignPath = path + '/' + alignDir
-  tablePath = path + '/' + tableDir
+  
 
-  reader = Reader(alignPath, alignsFileName, nlFileName, enFileName)
-  extractor = Extractor(reader, tablePath)
+  
   phraseTables = PhraseTables()
+  phraseTablesTest = None  
+  coverageComputer = None
+  
+  
 
   def __init__(self):
     pass
 
   def run(self):
-    self.phraseTables.getFromExtractor(self.extractor)
+    #self.phraseTables.getFromExtractor(self.extractor)
 
-   #self.initPhraseTables()
+   self.initTrainTables()
+   self.initTestTables()
+   
+   self.calcCoverage()
+   
     #~sys.stdout.write( 'log(Pr(\"and\" | \"en\")) = ' + str(self.phraseTables.getConditionalProbabilityEn('en', 'and', True)) + '\n')
     #~sys.stdout.write( 'Pr(\"and\" | \"en\") = ' + str(self.phraseTables.getConditionalProbabilityEn('en', 'and', False)) + '\n')
 #~
@@ -605,42 +766,82 @@ class Main(object):
 #~
     #~sys.stdout.write( 'Pr(\"en\" , \"and\") = ' + str(self.phraseTables.getJointProbability('en', 'and', False)) + '\n')
 
-  def initPhraseTables(self):
 
+  def calcCoverage(self):
+    # init test tables
+    if self.phraseTablesTest != None:      
+      
+      self.coverageComputer = CoverageComputer(self.phraseTables, self.phraseTablesTest)
+      
+      self.coverageComputer.calcCoverageSimple()
+      self.coverageComputer.calcCoverageWithConcatenations()
+  
+  def initTestTables(self):
+    alignDir = 'heldout/' 
+    alignsFileName = 'europarl.nl-en.heldout.align'
+    nlFileName = 'europarl.nl-en.heldout.nl'
+    enFileName = 'europarl.nl-en.heldout.en'
+    
+    tableDir = 'tables_test/'
+    
+    self.phraseTablesTest = PhraseTables()
+    self.initPhraseTables(self.phraseTablesTest, alignDir, tableDir, alignsFileName, nlFileName, enFileName)
+    
+
+  def initTrainTables(self):
+    alignDir = 'aligned-data/'
+    alignsFileName = 'aligned.nl-en2'
+    nlFileName = 'europarl.nl-en.nl2'
+    enFileName = 'europarl.nl-en.en2'
+ 
+    tableDir = 'tables_10000/'
+    self.initPhraseTables(self.phraseTables, alignDir, tableDir, alignsFileName, nlFileName, enFileName)
+    
+    
+    
+  def initPhraseTables(self, pt, alignDir, tableDir, alignsFileName, nlFileName, enFileName):
+    
+    
+    
+    alignPath = self.path + '/' + alignDir
+    tablePath = self.path + '/' + tableDir
+  
+    
+  
     # if tables are already written to files
-    if (os.path.isfile(self.tablePath  + table_nl_en_file) and
-          os.path.isfile(self.tablePath  + table_nl_file) and
-          os.path.isfile(self.tablePath  + table_en_file)):
+    if (os.path.isfile(tablePath  + table_nl_en_file) and
+          os.path.isfile(tablePath  + table_nl_file) and
+          os.path.isfile(tablePath  + table_en_file)):
 
       sys.stdout.write('===================================================\n' +
                      'reading phrases from files: \n' +
                      'NL & EN joint phrase table: \"' + table_nl_en_file + '\"\n' +
                      'NL phrase table: \"' + table_nl_file + '\"\n' +
                      'EN phrase table: \"' + table_en_file + '\"\n' +
-                     'from directory \"' + self.tablePath + '\"'+ '\n' +
+                     'from directory \"' + tablePath + '\"'+ '\n' +
                      '===================================================\n\n')
 
-      self.phraseTables.readFromFiles(self.tablePath)
+      pt.readFromFiles(tablePath)
 
 
     else:
         sys.stdout.write('\n===================================================\n' +
                          'parsing alignments in \"' + alignsFileName + '\"\n' +
                          'for \"' + nlFileName + '\" and \"' + enFileName + '\"\n'+
-                         'from directory \"' + self.alignPath + '\"'+ '\n' +
+                         'from directory \"' + alignPath + '\"'+ '\n' +
                          '===================================================\n')
 
-        self.phraseTables.getFromExtractor(self.extractor)
+        pt.getFromExtractor( tablePath, alignPath, alignsFileName, nlFileName, enFileName)
 
         sys.stdout.write('\n===================================================\n' +
                          'have parsed alignments in \"' + alignsFileName + '\"\n' +
                          'for \"' + nlFileName + '\" and \"' + enFileName + '\"\n'+
-                         'from directory \"' + self.alignPath + '\"'+ '\n'+
+                         'from directory \"' + alignPath + '\"'+ '\n'+
                          'and saved to: \n' +
                          'NL & EN joint phrase table: \"' + table_nl_en_file + '\"\n' +
                          'NL phrase table: \"' + table_nl_file + '\"\n' +
                          'EN phrase table: \"' + table_en_file + '\"\n' +
-                         'in directory \"' + self.tablePath + '\"'+ '\n' +
+                         'in directory \"' + tablePath + '\"'+ '\n' +
                          '===================================================\n')
 
 ### used to call Main.run()
