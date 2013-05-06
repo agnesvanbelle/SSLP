@@ -20,7 +20,7 @@ writeRawFiles = True
 
 
 
-MAXIMUM_READ_SENTENCES = 100000  #10000 # for testing purposes
+MAXIMUM_READ_SENTENCES = 1000  #10000 # for testing purposes
 
 gc.disable()
 
@@ -29,7 +29,7 @@ gc.disable()
   The Reader class is used to read - line by line - the relevant stuff from the three files
   The Extractor class extracts phrases (using Reader)
   The PhraseTables class hold the phrase tables
-
+  The CoverageComputer check the coverage given 2 PhraseTable objects
 
 """
 
@@ -152,8 +152,7 @@ class CoverageComputer(object):
         
     for phrasePair in self.phraseTablesTest.table_nl_en:
       
-      nl = phrasePair[0]
-      en = phrasePair[1]
+      
       total += 1
       
       for n in range(1, self.maxConcatenations+1):
@@ -167,6 +166,9 @@ class CoverageComputer(object):
         
         else :
           
+          nl = phrasePair[0].split()
+          en = phrasePair[1].split()
+      
           if self.check_coverage(nl, en, n) : 
             found += 1
             sys.stdout.write('found at n='+str(n)+'\n')
@@ -221,7 +223,7 @@ class CoverageComputer(object):
   def valid_pair(self, a, len_a, p):
     #n = len(a)
     for i in range(0,len_a):
-      if (a[i],p[i]) not in self.phraseTables.table_nl_en:
+      if (a[i],p[i]) not in self.phraseTablesTrain.table_nl_en:
         return False
     return True
 
@@ -260,22 +262,24 @@ class Extractor(object):
     write tables to files
   """
   maxPhraseLen = 4
-  reader = None
+  
 
-  table_nl = {}
-  table_en = {}
-  table_nl_en = {}
-
-  total_extracted = 0
-
-  unique_nl = 0
-  unique_en = 0
-  unique_nl_en = 0
+  
 
   def __init__(self, reader, tablePath ):
     self.reader = reader
     self.tablePath = tablePath
    
+    self.table_nl = {}
+    self.table_en = {}
+    self.table_nl_en = {}
+    
+    self.unique_nl = 0
+    self.unique_en = 0
+    self.unique_nl_en = 0
+    
+    self.total_extracted = 0
+    
     
     if not os.path.exists(tablePath):
       os.makedirs(tablePath)
@@ -315,7 +319,7 @@ class Extractor(object):
 
   def normalizeTables(self):
 
-    for pair, value in self.table_nl_en.iteritems():
+    for pair, value in self.table_nl_en.iteritems():     
       value_new = math.log(value) - math.log(self.total_extracted)
       self.table_nl_en[pair] = value_new
 
@@ -752,9 +756,11 @@ class Main(object):
   def run(self):
     #self.phraseTables.getFromExtractor(self.extractor)
 
+  
+   
    self.initTrainTables()
    self.initTestTables()
-   
+  
    self.calcCoverage()
    
     #~sys.stdout.write( 'log(Pr(\"and\" | \"en\")) = ' + str(self.phraseTables.getConditionalProbabilityEn('en', 'and', True)) + '\n')
@@ -795,6 +801,7 @@ class Main(object):
     enFileName = 'europarl.nl-en.en2'
  
     tableDir = 'tables_10000/'
+    
     self.initPhraseTables(self.phraseTables, alignDir, tableDir, alignsFileName, nlFileName, enFileName)
     
     
