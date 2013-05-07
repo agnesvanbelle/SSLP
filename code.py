@@ -46,8 +46,8 @@ class PhraseTables(object):
                     #from these three, pr(nl | en) and pr(en | nl) can be computed
 
   
-  def __init__(self):
-    pass
+  def __init__(self, td):
+    self.tableDir = td
 
   # pr( en | nl)
   def getConditionalProbabilityEn(self, nl, en, log=False):
@@ -133,9 +133,14 @@ class CoverageComputer(object):
   
     total = 0
     found = 0  
-
+    
+    
+        
     for phrasePair in self.phraseTablesTest.table_nl_en:   
       total += 1
+      
+      if total % 10000 == 0 :
+        sys.stdout.write('Cov. w/o concat. reached line ' + str(total) + ' \n')
 
       if phrasePair in self.phraseTablesTrain.table_nl_en:
         found += 1    
@@ -155,13 +160,16 @@ class CoverageComputer(object):
       
       total += 1
       
+      if total % 10000 == 0 :
+        sys.stdout.write('Cov. with concat. reached line ' + str(total) + ' \n')
+        
       for n in range(1, self.maxConcatenations+1):
         
         if n == 1:
           
           if phrasePair in self.phraseTablesTrain.table_nl_en :
             found += 1
-            sys.stdout.write('found at n='+str(n)+'\n')
+            #sys.stdout.write('found at n='+str(n)+'\n')
             break
         
         else :
@@ -171,7 +179,7 @@ class CoverageComputer(object):
       
           if self.check_coverage(nl, en, n) : 
             found += 1
-            sys.stdout.write('found at n='+str(n)+'\n')
+            #sys.stdout.write('found at n='+str(n)+'\n')
             break
     
     sys.stdout.write(str( float(found)) + ' / ' + str(total) + ' = ' +  str(float(found)/total) + '\n')
@@ -181,7 +189,7 @@ class CoverageComputer(object):
   #checks if a partition of a phrase is valid (every phrase is in the hashtable)
   def valid_en (self, partition_pairs):
     for x in partition_pairs:
-      if x not in self.phraseTablesTrain.table_en:
+      if " ".join(x) not in self.phraseTablesTrain.table_en:
         return False
     return True
 
@@ -190,7 +198,7 @@ class CoverageComputer(object):
 
   def valid_nl (self, partition_pairs):
     for x in partition_pairs:
-      if x not in self.phraseTablesTrain.table_nl:
+      if " ".join(x) not in self.phraseTablesTrain.table_nl:
         return False
     return True
 
@@ -223,7 +231,7 @@ class CoverageComputer(object):
   def valid_pair(self, a, len_a, p):
     #n = len(a)
     for i in range(0,len_a):
-      if (a[i],p[i]) not in self.phraseTablesTrain.table_nl_en:
+      if (" ".join(a[i])," ".join(p[i])) not in self.phraseTablesTrain.table_nl_en:
         return False
     return True
 
@@ -241,16 +249,16 @@ class CoverageComputer(object):
     y_partitions = self.get_valid_partitions_en(y_partitions)
     for a in x_partitions :
       len_a = len(a)
-      print a
+      #print a
       for b in y_partitions:
-        print b
+        #print b
         perms = itertools.permutations(b)
         for p in perms:
-          print p
+          #print p
           if self.valid_pair(a, len_a, p):
-            print 'valid:'
-            print a
-            print b
+            #print 'valid:'
+            #print a
+            #print b
             return True
     return False
 
@@ -331,9 +339,6 @@ class Extractor(object):
       value_new = math.log(value) - math.log(self.total_extracted)
       self.table_en[en] = value_new
 
-
-  def makeConditionalTables(self):
-    pass
 
 
   def pickleTables(self):
@@ -630,18 +635,6 @@ class Extractor(object):
       self.unique_nl_en = self.unique_nl_en + 1
 
 
-  # check if the english word is unaligned
-  def isEnUnaligned(self, enIndex, alignments):
-
-    lenAlignments = len(alignments)
-
-    i = 0
-    while (i < lenAlignments and alignments[i][1] <= enIndex):
-      if (alignments[i][1] == enIndex):
-        return False
-      i = i + 1
-
-    return True
 
   # get the words in the word-list "line_list" that the indices
   # in "aligned_list" point to
@@ -744,7 +737,7 @@ class Main(object):
   
 
   
-  phraseTables = PhraseTables()
+  phraseTables = None
   phraseTablesTest = None  
   coverageComputer = None
   
@@ -760,6 +753,7 @@ class Main(object):
    
    self.initTrainTables()
    self.initTestTables()
+  
   
    self.calcCoverage()
    
@@ -779,8 +773,19 @@ class Main(object):
       
       self.coverageComputer = CoverageComputer(self.phraseTables, self.phraseTablesTest)
       
-      self.coverageComputer.calcCoverageSimple()
-      self.coverageComputer.calcCoverageWithConcatenations()
+      sys.stdout.write('\n===================================================\n' +
+                       'calculating coverage of test phrases from dir \n' +
+                        '\"'+ str(self.phraseTablesTest.tableDir) + '\"\n' +
+                       'for train phrases from dir \"' + str(self.phraseTables.tableDir) + '\"\n' 
+                       '===================================================\n\n')
+                       
+      covS = self.coverageComputer.calcCoverageSimple()
+      covC = self.coverageComputer.calcCoverageWithConcatenations()
+      
+      fc = open( 'coverage_log.txt', "wb" )
+      fc.write('covS: \t' + str(covS) + '\n')
+      fc.write('covC: \t' + str(covC) + ' (with up to ' + str(self.coverageComputer.maxConcatenations) + 'concats)  \n')
+      fc.close()
   
   def initTestTables(self):
     alignDir = 'heldout/' 
@@ -790,7 +795,7 @@ class Main(object):
     
     tableDir = 'tables_test/'
     
-    self.phraseTablesTest = PhraseTables()
+    self.phraseTablesTest = PhraseTables(tableDir)
     self.initPhraseTables(self.phraseTablesTest, alignDir, tableDir, alignsFileName, nlFileName, enFileName)
     
 
@@ -802,6 +807,7 @@ class Main(object):
  
     tableDir = 'tables_10000/'
     
+    self.phraseTables = PhraseTables(tableDir)
     self.initPhraseTables(self.phraseTables, alignDir, tableDir, alignsFileName, nlFileName, enFileName)
     
     
@@ -820,7 +826,7 @@ class Main(object):
           os.path.isfile(tablePath  + table_nl_file) and
           os.path.isfile(tablePath  + table_en_file)):
 
-      sys.stdout.write('===================================================\n' +
+      sys.stdout.write('\n===================================================\n' +
                      'reading phrases from files: \n' +
                      'NL & EN joint phrase table: \"' + table_nl_en_file + '\"\n' +
                      'NL phrase table: \"' + table_nl_file + '\"\n' +

@@ -1,0 +1,2 @@
+covS: 	0.0535459692859
+covC: 	0.139944600595 (with up to 3concats)  

@@ -13,17 +13,17 @@ def coverage_concat(phrase, table_nl_en,n):
 	
 	
 def coverage (test_phrases, table_nl_en, n):
-	 total = 0
-	 found = 0
-	 for phrase in test_phrases:
-	 	total += 1
-	 	if n == 1:
-	 		if test_phrases[phrase] != None
-	 			found += 1
-	 	else
-	 		check_concat(phrase, table_nl_en, n)
-	 		
-	 return float(found)/total 
+  total = 0
+  found = 0
+  for phrase in test_phrases:
+    total += 1
+    if n == 1:
+      if test_phrases[phrase] != None :
+        found += 1
+    else :
+      check_concat(phrase, table_nl_en, n)
+    
+  return float(found)/total 
 
 
 
