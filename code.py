@@ -4,7 +4,7 @@ import math
 import cPickle as pickle
 import gc
 import itertools
-
+import copy
 
 table_nl_file = 'table_nl.dat'
 table_en_file = 'table_en.dat'
@@ -20,7 +20,7 @@ writeRawFiles = True
 
 
 
-MAXIMUM_READ_SENTENCES = 1000  #10000 # for testing purposes
+MAXIMUM_READ_SENTENCES = 10000000  #10000 # for testing purposes
 
 gc.disable()
 
@@ -36,7 +36,7 @@ gc.disable()
 class PhraseTables(object):
   """
     holds the phrase tables
-    has methods to caulculate the conditional probabilities 
+    has methods to caulculate the conditional probabilities
   """
 
   # phrase tables are dictionaries
@@ -45,7 +45,7 @@ class PhraseTables(object):
   table_nl_en = {} # contains log(pr(nl, en)) for all dutch&english phrase pairs
                     #from these three, pr(nl | en) and pr(en | nl) can be computed
 
-  
+
   def __init__(self, td):
     self.tableDir = td
 
@@ -109,83 +109,103 @@ class PhraseTables(object):
   def getFromExtractor(self, tablePath, alignPath, alignsFileName, nlFileName, enFileName):
     reader = Reader(alignPath, alignsFileName, nlFileName, enFileName)
     extractor = Extractor(reader, tablePath)
-    
+
     extractor.extract()
-    
+
     self.table_nl = extractor.table_nl
     self.table_en = extractor.table_en
     self.table_nl_en = extractor.table_nl_en
 
 
 class CoverageComputer(object):
-  
+
   phraseTablesTrain = None
   phraseTablesTest = None
   maxConcatenations = 3
-  
-  # pt1 = of which you want to compute the coverage. 
+
+  # pt1 = of which you want to compute the coverage.
   # pt2 = contains the phrases used to compute coverage
   def __init__(self, pt1, pt2):
     self.phraseTablesTrain = pt1
     self.phraseTablesTest = pt2
-  
-  def calcCoverageSimple (self):
-  
+
+  def calcCoverageSimple (self, weighted=False):
+
     total = 0
-    found = 0  
-    
-    
-        
-    for phrasePair in self.phraseTablesTest.table_nl_en:   
+    foundW = 0.0
+    found = 0
+
+  
+
+    for phrasePair in self.phraseTablesTest.table_nl_en:
       total += 1
+      
       
       if total % 10000 == 0 :
         sys.stdout.write('Cov. w/o concat. reached line ' + str(total) + ' \n')
 
       if phrasePair in self.phraseTablesTrain.table_nl_en:
-        found += 1    
-  
-    sys.stdout.write(str( float(found)) + ' / ' + str(total) + ' = ' +  str(float(found)/total) + '\n')
-    return float(found)/total 
+        found += 1
+        if weighted:
+          foundW += math.exp(self.phraseTablesTest.table_nl_en[phrasePair])
+          
     
+    if weighted:
+      sys.stdout.write('weighted coverage n is 1:  ' +  str(foundW) + '\n')      
+      return foundW
+    else :
+      sys.stdout.write('coverage n is 1 : ' + str( float(found)) + ' / ' + str(total) + ' = ' +  str(float(found)/total) + '\n')
+      return float(found)/total
 
-  
-  def calcCoverageWithConcatenations (self):
-    
+
+
+  def calcCoverageWithConcatenations (self, weighted=False):
+
     total = 0
     found = 0
-        
+    foundW = 0.0
+    
     for phrasePair in self.phraseTablesTest.table_nl_en:
-      
-      
+
+
       total += 1
-      
+
       if total % 10000 == 0 :
         sys.stdout.write('Cov. with concat. reached line ' + str(total) + ' \n')
-        
+
       for n in range(1, self.maxConcatenations+1):
-        
+
         if n == 1:
-          
           if phrasePair in self.phraseTablesTrain.table_nl_en :
             found += 1
-            #sys.stdout.write('found at n='+str(n)+'\n')
+            if weighted:
+              foundW += math.exp(self.phraseTablesTest.table_nl_en[phrasePair])
             break
-        
+
         else :
-          
+
           nl = phrasePair[0].split()
           en = phrasePair[1].split()
-      
-          if self.check_coverage(nl, en, n) : 
+
+          if self.check_coverage(nl, en, n) :            
             found += 1
-            #sys.stdout.write('found at n='+str(n)+'\n')
+            if weighted:
+              foundW += math.exp(self.phraseTablesTest.table_nl_en[phrasePair])
+            #if n == self.maxConcatenations :
+            #  sys.stdout.write('found at n='+str(n)+': \n')
+            #  sys.stdout.write(str(phrasePair) + '\n')
             break
+
     
-    sys.stdout.write(str( float(found)) + ' / ' + str(total) + ' = ' +  str(float(found)/total) + '\n')
-    return float(found)/total 
-  
-  
+    if weighted:
+      sys.stdout.write('weighted coverage  n is up to ' + str(self.maxConcatenations) + ': ' +  str(foundW) + '\n')   
+      return foundW
+    else :
+      sys.stdout.write('coverage n is up to ' + str(self.maxConcatenations) + ': ' + str( float(found)) + ' / ' + str(total) + ' = ' +  str(float(found)/total) + '\n')
+      return float(found)/total
+      
+
+
   #checks if a partition of a phrase is valid (every phrase is in the hashtable)
   def valid_en (self, partition_pairs):
     for x in partition_pairs:
@@ -204,29 +224,66 @@ class CoverageComputer(object):
 
   def get_valid_partitions_nl(self, partitions):
     return [x for x in partitions if self.valid_nl(x)]
-    
+
   def part2(self, x, len_x):
     y = []
-    #n = len(x)
     for i in range(1, len_x):
-      y.append((x[0:i], x[i:len_x]))
+      y.append([x[0:i], x[i:len_x]])
     return y
+#~
+  #~def part3( self,x, len_x):
+    #~y = []
+    #~for i in range(1, len_x):
+      #~for j in range(i+1, len_x):
+        #~y.append((x[0:i], x[i:j], x[j:len_x]))
+    #~return y
+#~
+#~
+  #~def part4(self, x, len_x):
+     #~y = []
+     #~for i in range(1, len_x):
+       #~#sys.stdout.write('i: '+ str(i)+'\n')
+       #~for j in range(i+1, len_x):
+         #~#sys.stdout.write('j: '+ str(j)+'\n')
+         #~for k in range(j+1, len_x):
+           #~y.append((x[0:i], x[i:j], x[j:k], x[k:len_x]))
+     #~return y
+  
+  # n = nr of partitions (divisions)
+  def part(self, x, len_x, n):
+    if n < 2: #wrong value
+      return x
+    
+    currentPartitions = self.part2(x, len_x)
+    for i in range (3,n+1) :
+      k = i - 2
+      newPartitions = []
+      for p in currentPartitions :
+        p_start = p[:k]
+        p_end = p[k:][0]
+        p_ends = self.part2(p_end, len(p_end))
+        #sys.stdout.write('p_start of ' + str(p) + ': ' + str(p_start) + '\n')
+        #sys.stdout.write('p_ends partitions of ' + str(p_end) + ': ' + str(p_ends) + '\n')
+        while p_ends != [] :        
+          p_this_end = p_ends.pop()     
+          p_start_copy = copy.deepcopy(p_start)    
+          p_start_copy.extend(p_this_end)
+          newPartitions.append( p_start_copy)
+          
+      i += 1
+      currentPartitions = newPartitions      
+    return currentPartitions
 
-  def part3(self, x, len_x):
-    y = []
-    for i in range(1, len_x):
-      for j in range(i+1, len_x):
-        y.append((x[0:i], x[i:j], x[j:len_x]))
-    return y
-
-  def partitions(self, x,n):
-    len_x = len(x)
-    if n == 2:
-      partitions = self.part2(x, len_x)
-    elif n == 3:
-      partitions = self.part3(x, len_x)
-    return partitions
-
+  #def partitions(self, x,n):
+    #len_x = len(x)
+    #~if n == 2:
+      #~partitions = self.part2(x, len_x)
+    #~elif n == 3:
+      #~partitions = self.part3(x, len_x)
+    #~elif n == 4:
+      #~partitions = self.part4(x, len_x)
+    #~return partitions
+    #return self.part(x, len(x), n)
 
   def valid_pair(self, a, len_a, p):
     #n = len(a)
@@ -236,16 +293,17 @@ class CoverageComputer(object):
     return True
 
   # x is the dutch phrase !
-  #checks coverage of the phrase pair for n = 2 to 3
+  #checks coverage of the phrase pair for a certain value of n 
+  #(n = nr. of concatenations)
   #table_x : hashtable of 'x' language
   #table_y : hashtable of 'y' language
   #table_x_y : hashtable for ('x','y') phrase pairs
   def check_coverage(self, x, y, i):
     #for i in range(2,self.maxConcatenations+1):
     #x, y = phrase_pair
-    x_partitions = self.partitions(x, i)
-    x_partitions = self.get_valid_partitions_nl(x_partitions) 
-    y_partitions = self.partitions(y, i)
+    x_partitions = self.part(x, len(x), i)
+    x_partitions = self.get_valid_partitions_nl(x_partitions)
+    y_partitions = self.part(y, len(y), i)
     y_partitions = self.get_valid_partitions_en(y_partitions)
     for a in x_partitions :
       len_a = len(a)
@@ -270,25 +328,25 @@ class Extractor(object):
     write tables to files
   """
   maxPhraseLen = 4
-  
 
-  
+
+
 
   def __init__(self, reader, tablePath ):
     self.reader = reader
     self.tablePath = tablePath
-   
+
     self.table_nl = {}
     self.table_en = {}
     self.table_nl_en = {}
-    
+
     self.unique_nl = 0
     self.unique_en = 0
     self.unique_nl_en = 0
-    
+
     self.total_extracted = 0
-    
-    
+
+
     if not os.path.exists(tablePath):
       os.makedirs(tablePath)
 
@@ -327,7 +385,7 @@ class Extractor(object):
 
   def normalizeTables(self):
 
-    for pair, value in self.table_nl_en.iteritems():     
+    for pair, value in self.table_nl_en.iteritems():
       value_new = math.log(value) - math.log(self.total_extracted)
       self.table_nl_en[pair] = value_new
 
@@ -395,158 +453,158 @@ class Extractor(object):
       print list_nl
       print list_en
 
-    
 
-    
+
+
     totalExtractedThisPhrase = 0
-    
+
     len_list_nl = len(list_nl)
     len_list_en = len(list_en)
     len_alignments = len(alignments)
-    
+
     nl_to_en = [[100, -1] for i in range(len_list_nl)] #[minimum, maximum]
     en_to_nl = [[100, -1] for i in range(len_list_en)]
-    
+
     #print nl_to_en
-    
+
     for a_pair in alignments:
       #print a_pair
-      
+
       nl_index = a_pair[0]
       en_index = a_pair[1]
-      
+
       #sys.stdout.write('nl_index: ' + str(nl_index) + '\n')
-      
-      
+
+
       nl_to_en[nl_index][0] = min(en_index, nl_to_en[nl_index][0])
       nl_to_en[nl_index][1] = max(en_index, nl_to_en[nl_index][1])
-      
+
       en_to_nl[en_index][0] = min(nl_index, en_to_nl[en_index][0])
       en_to_nl[en_index][1] = max(nl_index, en_to_nl[en_index][1])
-      
-      
+
+
     del nl_index
     del en_index
-      
+
     if moreDebug:
       print nl_to_en
       print en_to_nl
-      
-    
+
+
     for nl_index1 in range(0, len_list_nl-1): # do not check the period at the end
       if moreDebug:
         sys.stdout.write('nl_index1: ' + str(nl_index1) + '\n')
-      
-      
+
+
       enRange = nl_to_en[nl_index1]
-      
+
       if (enRange != [100, -1]): #if nl start-word is aligned
-        
+
         nlFromEnMin = min(en_to_nl[enRange[0]][0], en_to_nl[enRange[1]][0])
         nlFromEnMax = max(en_to_nl[enRange[0]][1], en_to_nl[enRange[1]][1])
-        
+
         nl_index2 = nl_index1
         while(nl_index2 < min(nl_index1 + self.maxPhraseLen, len_list_nl)):
           if moreDebug:
             sys.stdout.write('\tnl_index2: ' + str(nl_index2) + ', ')
             sys.stdout.write('\tchecking: ' + self.getSubstring(list_nl, range(nl_index1, nl_index2+1)) + '\n')
-          
+
           enRangeThisIndex = nl_to_en[nl_index2]
-          
-          
+
+
           if (enRangeThisIndex != [100, -1]): #if nl end-word is aligned
             # update the nl-to-en range
             enRange = [min(enRange[0], enRangeThisIndex[0]), max(enRange[1], enRangeThisIndex[1])]
-            
+
             if (enRange[1] - enRange[0] < self.maxPhraseLen):
               # update the nl-to-en-to-nl range
               nlFromEnMin = min(nlFromEnMin, en_to_nl[enRange[0]][0], en_to_nl[enRange[1]][0])
               nlFromEnMax = max(nlFromEnMax, en_to_nl[enRange[0]][1], en_to_nl[enRange[1]][1])
-              
+
               # nl-to-en-to-nl range minimum is below nl-range minimum
               if nlFromEnMin < nl_index1:
                 if moreDebug:
                   sys.stdout.write('\tnlFromEnMin < nl_index1: ' + str(nlFromEnMin) + ' < ' + str(nl_index1) + '\n')
                 break
-                
+
               # nl-to-en-to-nl range maximum is above nl-range maximum
               elif nlFromEnMax > nl_index2:
                 if moreDebug:
-                  sys.stdout.write('\tnlFromEnMax > nl_index2: ' + str(nlFromEnMax) + ' > ' + str(nl_index2) + '\n')   
+                  sys.stdout.write('\tnlFromEnMax > nl_index2: ' + str(nlFromEnMax) + ' > ' + str(nl_index2) + '\n')
                 # next nl end-word is the one on the nl-to-en-to-nl range maximum (if within range)
-                nl_index2 = nlFromEnMax   
-                if nl_index2 - nl_index1 < self.maxPhraseLen :                  
+                nl_index2 = nlFromEnMax
+                if nl_index2 - nl_index1 < self.maxPhraseLen :
                   continue
                 else :
                   break
-              
+
               # nl-to-en-to-nl range is same as nl-to-en range: got consistent pair
               elif [nl_index1, nl_index2] == [nlFromEnMin, nlFromEnMax] :
                 if moreDebug:
                   sys.stdout.write ('\t' + str([nl_index1, nl_index2]) + ' == ' + str([nlFromEnMin, nlFromEnMax]) + '\n')
                   sys.stdout.write ('\t'+ self.getSubstring(list_nl, range(nl_index1, nl_index2+1)) + ' == ')
                   sys.stdout.write ( self.getSubstring(list_en, range(enRange[0], enRange[1]+1)) + '\n')
-                              
-                
+
+
                 self.addPair(list_nl, list_en, nl_index1, nl_index2, enRange[0], enRange[1])
                 totalExtractedThisPhrase += 1
-                
-                
-                
-                
+
+
+
+
                 ####################
-                #check for unaligned 
+                #check for unaligned
                 ######################
-                nl_unaligned_list = []    
+                nl_unaligned_list = []
                 en_unaligned_list = []
-                
-                ## unaligned on dutch  side                                
-                #above unlimited         
+
+                ## unaligned on dutch  side
+                #above unlimited
                 nl_index2_copy = nl_index2 + 1
                 while nl_index2_copy < min(nl_index1 + self.maxPhraseLen, len_list_nl) and nl_to_en[nl_index2_copy] == [100, -1] :
                   nl_unaligned_list.append([nl_index1, nl_index2_copy])
                   nl_index2_copy += 1
-                
+
                 # below unlimited
                 nl_index1_copy = nl_index1 - 1
                 while nl_index1_copy >= 0  and nl_to_en[nl_index1_copy] == [100,-1] :
                   nl_unaligned_list.append([nl_index1_copy, nl_index2])
-                  
+
                   # above unlimited for this below-level
                   nl_index2_copy = nl_index2 + 1
                   while nl_index2_copy < min(nl_index1_copy + self.maxPhraseLen, len_list_nl)  and nl_to_en[nl_index2_copy] == [100, -1] :
                     nl_unaligned_list.append([nl_index1_copy, nl_index2_copy])
-                    nl_index2_copy += 1                    
-                  
+                    nl_index2_copy += 1
+
                   nl_index1_copy -= 1
 
                 ## unaligned on english  side
                 en_index1 = enRange[0]
-                en_index2 = enRange[1] 
-                             
-                #above unlimited         
+                en_index2 = enRange[1]
+
+                #above unlimited
                 en_index2_copy = en_index2 + 1
                 while en_index2_copy < min(en_index1 + self.maxPhraseLen, len_list_en) and en_to_nl[en_index2_copy] == [100, -1] :
                   en_unaligned_list.append([en_index1, en_index2_copy])
                   en_index2_copy += 1
-                
+
                 # below unlimited
                 en_index1_copy = en_index1 - 1
                 while en_index1_copy >= 0  and en_to_nl[en_index1_copy] == [100,-1] :
                   en_unaligned_list.append([en_index1_copy, en_index2])
-                  
+
                   # above unlimited for this below-level
                   en_index2_copy = en_index2 + 1
                   while en_index2_copy < min(en_index1_copy + self.maxPhraseLen, len_list_en)  and en_to_nl[en_index2_copy] == [100, -1] :
                     en_unaligned_list.append([en_index1_copy, en_index2_copy])
-                    en_index2_copy += 1                    
-                  
+                    en_index2_copy += 1
+
                   en_index1_copy -= 1
-                  
+
                 if moreDebug:
                   sys.stdout.write('\tunaligned nl list: ' + str(nl_unaligned_list) + '\n')
                   sys.stdout.write('\tunaligned en list: ' + str(en_unaligned_list) + '\n')
-                
+
                 # add unaligned nl's for current english phrase
                 for unaligned_nl in nl_unaligned_list :
                   self.addPair(list_nl, list_en, unaligned_nl[0], unaligned_nl[1], enRange[0], enRange[1])
@@ -559,39 +617,39 @@ class Extractor(object):
                   for unaligned_nl in nl_unaligned_list :
                     self.addPair(list_nl, list_en, unaligned_nl[0], unaligned_nl[1], unaligned_en[0], unaligned_en[1])
                     totalExtractedThisPhrase += 1
-              
-              
+
+
               else : #it wasnt a consistent phrase pair
-                if moreDebug: 
+                if moreDebug:
                   sys.stdout.write ('\t' + str([nl_index1, nl_index2]) + ' != ' + str([nlFromEnMin, nlFromEnMax]) + '\n')
                   sys.stdout.write ('\t'+ self.getSubstring(list_nl, range(nl_index1, nl_index2+1)) + ' != ' )
                   sys.stdout.write ( self.getSubstring(list_en, range(enRange[0], enRange[1]+1)) + '\n')
-                
+
             else:
               if moreDebug:
                 sys.stdout.write ('\t too long: ' + self.getSubstring(list_en, range(enRange[0], enRange[1]+1)) + '\n')
               break
-              
+
           else:
-            
+
             if moreDebug:
               sys.stdout.write('\t ' + str(nl_index2) + ' is unaligned\n')
-            
+
           if moreDebug:
             sys.stdout.write('we have extracted ' + str(totalExtractedThisPhrase) + ' phrase pairs \n')
-            
+
           nl_index2 +=1
-        
-        
-        
+
+
+
     self.addPeriod()
-      
+
     #~if moreDebug:
       #~sys.stdout.write('\nWith this sentence pair , \n')
       #~sys.stdout.write('we have extracted ' + str(totalExtractedThisPhrase) + ' phrase pairs \n')
 
 
-                
+
   # why not
   def addPeriod(self):
     self.total_extracted = self.total_extracted + 1
@@ -602,7 +660,7 @@ class Extractor(object):
     nl_enEntry = ('.' , '.') #tuple
 
     self.updateTables(nlEntry, enEntry, nl_enEntry)
-    
+
   def addPair(self, list_nl, list_en, start_nl, end_nl, start_en, end_en):
     self.total_extracted = self.total_extracted + 1
 
@@ -690,10 +748,10 @@ class Reader(object):
     line_aligns = self.f_aligns.readline()
     line_nl = self.f_nl.readline()
     line_en = self.f_en.readline()
-    
-   
-    
-    if not line_aligns: #EOF      
+
+
+
+    if not line_aligns: #EOF
       sys.stdout.write('\nEnd of files reached\n')
       self.f_aligns.close()
       self.f_nl.close()
@@ -701,8 +759,8 @@ class Reader(object):
       self.line_list_aligns = None
 
     else:
-      
-    
+
+
       self.line_list_aligns = self.get_align_list(line_aligns)
       self.line_nl_words = self.get_words (line_nl)
       self.line_en_words = self.get_words (line_en)
@@ -734,14 +792,14 @@ class Main(object):
 
 
 
-  
 
-  
+
+
   phraseTables = None
-  phraseTablesTest = None  
+  phraseTablesTest = None
   coverageComputer = None
-  
-  
+
+
 
   def __init__(self):
     pass
@@ -749,14 +807,14 @@ class Main(object):
   def run(self):
     #self.phraseTables.getFromExtractor(self.extractor)
 
-  
-   
+
+
    self.initTrainTables()
    self.initTestTables()
-  
-  
+
+
    self.calcCoverage()
-   
+
     #~sys.stdout.write( 'log(Pr(\"and\" | \"en\")) = ' + str(self.phraseTables.getConditionalProbabilityEn('en', 'and', True)) + '\n')
     #~sys.stdout.write( 'Pr(\"and\" | \"en\") = ' + str(self.phraseTables.getConditionalProbabilityEn('en', 'and', False)) + '\n')
 #~
@@ -768,59 +826,66 @@ class Main(object):
 
 
   def calcCoverage(self):
-    # init test tables
-    if self.phraseTablesTest != None:      
-      
+    if self.phraseTablesTest != None and self.phraseTables != None :
+
       self.coverageComputer = CoverageComputer(self.phraseTables, self.phraseTablesTest)
-      
+
       sys.stdout.write('\n===================================================\n' +
                        'calculating coverage of test phrases from dir \n' +
                         '\"'+ str(self.phraseTablesTest.tableDir) + '\"\n' +
                        'for train phrases from dir \"' + str(self.phraseTables.tableDir) + '\"\n' 
                        '===================================================\n\n')
-                       
-      covS = self.coverageComputer.calcCoverageSimple()
-      covC = self.coverageComputer.calcCoverageWithConcatenations()
       
-      fc = open( 'coverage_log.txt', "wb" )
-      fc.write('covS: \t' + str(covS) + '\n')
-      fc.write('covC: \t' + str(covC) + ' (with up to ' + str(self.coverageComputer.maxConcatenations) + 'concats)  \n')
-      fc.close()
-  
+      for n in range(1,7+1):
+        sys.stdout.write('with maxConcats = ' + str(n) + ': \n ')
+        
+        self.coverageComputer.maxConcatenations = n
+        
+        #covS = self.coverageComputer.calcCoverageSimple()
+        covC = self.coverageComputer.calcCoverageWithConcatenations()
+
+        #covSw = self.coverageComputer.calcCoverageSimple(True)
+        covCw = self.coverageComputer.calcCoverageWithConcatenations(True)
+        
+        fc = open( 'coverage_results.txt', "a+b" )
+        #fc.write('\ncovS: \t' + str(covS) + ', weighted: ' + str(covSw) + '\n')
+        fc.write('covC: \t' + str(covC) + ', weighted: ' + str(covCw) + ' (with up to ' + str(self.coverageComputer.maxConcatenations) + ' concats)  \n')
+        fc.close()
+
   def initTestTables(self):
-    alignDir = 'heldout/' 
+    alignDir = 'heldout/'
     alignsFileName = 'europarl.nl-en.heldout.align'
     nlFileName = 'europarl.nl-en.heldout.nl'
     enFileName = 'europarl.nl-en.heldout.en'
-    
+
     tableDir = 'tables_test/'
-    
+
     self.phraseTablesTest = PhraseTables(tableDir)
     self.initPhraseTables(self.phraseTablesTest, alignDir, tableDir, alignsFileName, nlFileName, enFileName)
-    
+
 
   def initTrainTables(self):
     alignDir = 'aligned-data/'
     alignsFileName = 'aligned.nl-en2'
     nlFileName = 'europarl.nl-en.nl2'
     enFileName = 'europarl.nl-en.en2'
- 
-    tableDir = 'tables_10000/'
-    
+
+    tableDir = 'tables/'
+
     self.phraseTables = PhraseTables(tableDir)
     self.initPhraseTables(self.phraseTables, alignDir, tableDir, alignsFileName, nlFileName, enFileName)
-    
-    
-    
+
+
+
   def initPhraseTables(self, pt, alignDir, tableDir, alignsFileName, nlFileName, enFileName):
-    
-    
-    
+
+
+
     alignPath = self.path + '/' + alignDir
     tablePath = self.path + '/' + tableDir
-  
-    
-  
+
+
+
     # if tables are already written to files
     if (os.path.isfile(tablePath  + table_nl_en_file) and
           os.path.isfile(tablePath  + table_nl_file) and
